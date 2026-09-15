@@ -65,10 +65,10 @@
     }
     function header(quotation){
       const panel=el('section','request-summary');
-      panel.append(el('span','eyebrow','Solicitação de cotação'),el('h1','',quotation.restaurantName||'Restaurante'));
-      const recipient=el('p','recipient','Para ');recipient.append(el('strong','',quotation.supplierName||'Fornecedor'));panel.append(recipient);
+      panel.append(el('span','eyebrow','Fornecedor'),el('h1','',quotation.supplierName||'Sua cotação'));
+      const recipient=el('p','recipient','Solicitado por ');recipient.append(el('strong','',quotation.restaurantName||'Restaurante'));panel.append(recipient);
       const deadline=el('p','deadline');deadline.append(icon('clock'),el('span','',`Responder até ${date(quotation.expiresAt)}`));panel.append(deadline);
-      if(quotation.title)panel.append(el('p','quotation-title',quotation.title));
+      if(quotation.title&&quotation.title!=='Cotação de compras')panel.append(el('p','quotation-title',quotation.title));
       return panel;
     }
     function answerList(quotation,answers){
@@ -78,9 +78,9 @@
         const row=el('li',`answer-item${answer.unavailable?' unavailable':''}`);row.append(el('strong','',item.name));
         if(answer.unavailable)row.append(el('p','','Indisponível'));
         else{
-          const unit=item.units.find(unit=>unit.id===answer.unitId);
-          row.append(el('p','',`${number(answer.quantity)} × ${unit?.label||'Unidade'}${answer.brand?' · '+answer.brand:''}`));
-          row.append(el('p','answer-price',`${currency(answer.unitPrice,4)} por ${unit?.label||'unidade'} · Total ${currency(answer.quantity*answer.unitPrice)}`));
+          const label=Core.offerUnitLabel(item,answer);
+          row.append(el('p','',`${number(answer.quantity)} × ${label}${answer.brand?' · '+answer.brand:''}`));
+          row.append(el('p','answer-price',`${currency(answer.unitPrice,4)} por ${label} · Total ${currency(answer.quantity*answer.unitPrice)}`));
         }
         list.append(row);
       }
@@ -101,14 +101,20 @@
       progress.textContent=`${state.quotation.items.length-invalid.size} de ${state.quotation.items.length} respondidos`;
       totalAmount.textContent=currency(totals.total);
       summaryCount.textContent=`${totals.count} ${totals.count===1?'item ofertado':'itens ofertados'}${totals.unavailable?' · '+totals.unavailable+' indisponíveis':''}`;
-      for(const item of state.quotation.items){const refs=state.fields.get(item.id),value=state.values[item.id],quantity=Core.decimal(value.quantity),price=Core.decimal(value.unitPrice),unit=item.units.find(unit=>unit.id===value.unitId);refs.total.textContent=!value.unavailable&&quantity>0&&price>0?currency(quantity*price):'—';refs.priceLabel.textContent=`Preço por ${unit?.label||'unidade'}`;}
+      for(const item of state.quotation.items){const refs=state.fields.get(item.id),value=state.values[item.id],quantity=Core.decimal(value.quantity),price=Core.decimal(value.unitPrice);refs.total.textContent=!value.unavailable&&quantity>0&&price>0?currency(quantity*price):'—';refs.priceLabel.textContent=`Preço por ${Core.offerUnitLabel(item,value)}`;}
     }
     function changed(itemId,field,value){
-      state.values[itemId][field]=value;state.dirty=true;state.pending=null;
+      const customKey={customLabel:'label',customAmount:'amount',customMeasure:'measure'}[field];
+      if(customKey)state.values[itemId].customUnit[customKey]=value;else state.values[itemId][field]=value;
+      if(field==='brand'&&state.values[itemId].brandMode==='other')state.values[itemId].otherBrand=value;
+      state.dirty=true;state.pending=null;
       const refs=state.fields.get(itemId);
-      if(field==='unitId'){state.values[itemId].quantity='';state.values[itemId].unitPrice='';refs.quantity.input.value='';refs.unitPrice.input.value='';}
+      if(field==='unitId'){state.values[itemId].quantity='';refs.quantity.input.value='';}
+      if(['unitId','customAmount','customMeasure'].includes(field)){state.values[itemId].unitPrice='';refs.unitPrice.input.value='';}
       for(const ref of Object.values(refs)){if(ref?.input){ref.input.removeAttribute('aria-invalid');ref.error.hidden=true;}}
-      refs.fields.hidden=state.values[itemId].unavailable;refs.unavailable.hidden=!state.values[itemId].unavailable;
+      refs.fields.hidden=state.values[itemId].unavailable;refs.availability.setAttribute('aria-pressed',String(state.values[itemId].unavailable));
+      refs.availability.title=state.values[itemId].unavailable?'Voltar a ofertar este item':'Marcar item como indisponível';
+      refs.customFields.hidden=state.values[itemId].unitId!=='__custom__';
       updateTotals();saveDraft();
     }
     function closeUnitChoice(focus=false){
@@ -116,55 +122,82 @@
       choice.menu.hidden=true;choice.trigger.setAttribute('aria-expanded','false');state.unitChoice=null;
       if(focus)choice.trigger.focus();
     }
-    function unitChoice(item,index){
+    function choiceMenu(item,index,key,label,options,selected,onPick){
       const container=el('div','unit-choice'),trigger=el('button','unit-choice-trigger'),copy=el('span'),menu=el('div','unit-choice-menu');
-      trigger.type='button';trigger.value=state.values[item.id].unitId;copy.textContent=item.units.find(unit=>unit.id===trigger.value)?.label||'Escolher embalagem';
-      trigger.append(copy,icon('arrow'));trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-expanded','false');trigger.setAttribute('aria-controls','unit-options-'+index);
-      menu.id='unit-options-'+index;menu.hidden=true;menu.setAttribute('role','listbox');menu.setAttribute('aria-label',`Embalagem de ${item.name}`);
-      const choice={container,trigger,menu};
-      for(const [position,unit]of item.units.entries()){
+      trigger.type='button';trigger.value=selected;copy.textContent=options.find(unit=>unit.id===selected)?.label||'Escolher';
+      trigger.append(copy,icon('arrow'));trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-expanded','false');trigger.setAttribute('aria-controls',key+'-options-'+index);
+      menu.id=key+'-options-'+index;menu.hidden=true;menu.setAttribute('role','listbox');menu.setAttribute('aria-label',`${label} de ${item.name}`);
+      const choice={container,trigger,menu,copy};
+      for(const [position,unit]of options.entries()){
         const option=el('button','unit-choice-option');option.type='button';option.setAttribute('role','option');option.setAttribute('aria-selected',String(unit.id===trigger.value));option.append(el('span','',unit.label),icon('check'));
         option.addEventListener('click',()=>{
-          if(trigger.value!==unit.id){trigger.value=unit.id;copy.textContent=unit.label;changed(item.id,'unitId',unit.id);}
-          Array.from(menu.children).forEach((node,i)=>node.setAttribute('aria-selected',String(item.units[i].id===unit.id)));closeUnitChoice(true);
+          trigger.value=unit.id;copy.textContent=unit.label;onPick(unit.id);
+          Array.from(menu.children).forEach((node,i)=>node.setAttribute('aria-selected',String(options[i].id===unit.id)));closeUnitChoice(true);
         });
         option.addEventListener('keydown',event=>{
-          const steps={ArrowDown:Math.min(item.units.length-1,position+1),ArrowUp:Math.max(0,position-1),Home:0,End:item.units.length-1};
+          const steps={ArrowDown:Math.min(options.length-1,position+1),ArrowUp:Math.max(0,position-1),Home:0,End:options.length-1};
           if(Object.hasOwn(steps,event.key)){event.preventDefault();menu.children[steps[event.key]].focus();}
           else if(event.key==='Escape'){event.preventDefault();closeUnitChoice(true);}
         });
         menu.append(option);
       }
-      function open(){closeUnitChoice();menu.hidden=false;trigger.setAttribute('aria-expanded','true');state.unitChoice=choice;menu.querySelector('[aria-selected="true"]')?.focus({preventScroll:true});}
+      function open(){closeUnitChoice();menu.hidden=false;trigger.setAttribute('aria-expanded','true');state.unitChoice=choice;(menu.querySelector('[aria-selected="true"]')||menu.firstElementChild)?.focus({preventScroll:true});}
       trigger.addEventListener('click',()=>menu.hidden?open():closeUnitChoice());
       trigger.addEventListener('keydown',event=>{if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();open();}else if(event.key==='Escape')closeUnitChoice();});
       container.addEventListener('focusout',event=>{if(state.unitChoice===choice&&!container.contains(event.relatedTarget))closeUnitChoice();});
       container.append(trigger,menu);return choice;
     }
+    function unitChoice(item,index){
+      const options=[...item.units];if(Core.customMeasures(item).length)options.push({id:'__custom__',label:'Outra embalagem'});
+      return choiceMenu(item,index,'unit','Embalagem',options,state.values[item.id].unitId,id=>{if(state.values[item.id].unitId!==id)changed(item.id,'unitId',id);});
+    }
     function field(item,index,key,label,type='text'){
       const wrap=el('div','field'),id=`offer-${index}-${key}`,labelNode=el('label','',label);labelNode.htmlFor=id;
       const choice=type==='select'?unitChoice(item,index):null,input=choice?choice.trigger:el('input');input.id=id;
-      if(type!=='select'){input.type='text';input.autocomplete='off';input.maxLength=key==='brand'?120:24;if(key!=='brand')input.inputMode='decimal';}
-      input.value=state.values[item.id][key]??'';if(type!=='select')input.addEventListener('input',()=>changed(item.id,key,input.value));
+      if(type!=='select'){input.type='text';input.autocomplete='off';input.maxLength=['brand','customLabel'].includes(key)?120:24;if(!['brand','customLabel'].includes(key))input.inputMode='decimal';}
+      const customKey={customLabel:'label',customAmount:'amount'}[key];
+      input.value=(customKey?state.values[item.id].customUnit[customKey]:state.values[item.id][key])??'';
+      if(key==='unitPrice'){
+        const initial=Core.decimal(input.value);if(Number.isFinite(initial))input.value=Core.formatPrice(initial);
+        let precise=Number.isFinite(initial)&&Math.abs(initial-Number(initial.toFixed(2)))>1e-9;
+        input.addEventListener('beforeinput',event=>{if(event.inputType==='insertText'&&input.selectionStart===0&&input.selectionEnd===input.value.length)precise=false;});
+        input.addEventListener('paste',event=>{event.preventDefault();const pasted=event.clipboardData?.getData('text')||'',formatted=Core.priceFromPaste(pasted);input.value=formatted===null?pasted.trim().slice(0,24):formatted;const amount=Core.decimal(input.value);precise=Number.isFinite(amount)&&Math.abs(amount-Number(amount.toFixed(2)))>1e-9;changed(item.id,key,input.value);});
+        input.addEventListener('input',()=>{if(!precise)input.value=Core.priceFromTyping(input.value);if(!input.value)precise=false;changed(item.id,key,input.value);});
+      }else if(type!=='select')input.addEventListener('input',()=>changed(item.id,key,input.value));
       const error=el('p','field-error');error.id=id+'-error';error.hidden=true;input.setAttribute('aria-describedby',error.id);
       wrap.append(labelNode);
       if(key==='unitPrice'){const money=el('div','money-input');money.append(el('span','','R$'),input);wrap.append(money);input.placeholder='0,00';}else wrap.append(choice?choice.container:input);
       wrap.append(error);return {wrap,input,error,label:labelNode};
     }
+    function brandField(item,index){
+      const ref=field(item,index,'brand','Marca (opcional)'),value=state.values[item.id],brands=Array.from(new Set((item.brands||[]).filter(brand=>typeof brand==='string'&&brand.trim()).map(brand=>brand.trim())));
+      const matched=brands.indexOf(value.brand),other=value.brandMode==='other'||Boolean(value.brand&&matched<0),selected=other?'other':matched>=0?'brand-'+matched:'none';
+      value.brandMode=other?'other':'';if(other)value.otherBrand=value.brand;
+      const options=[{id:'none',label:'Sem marca'},...brands.map((label,position)=>({id:'brand-'+position,label})),{id:'other',label:'Outra marca'}];
+      const choice=choiceMenu(item,index,'brand','Marca',options,selected,id=>{
+        value.brandMode=id==='other'?'other':'';const next=id==='other'?value.otherBrand||'':id==='none'?'':brands[Number(id.slice(6))];
+        ref.input.value=next;ref.input.hidden=id!=='other';changed(item.id,'brand',next);
+      });
+      choice.trigger.id=`offer-${index}-brand-choice`;ref.label.htmlFor=choice.trigger.id;ref.input.setAttribute('aria-label',`Outra marca de ${item.name}`);ref.input.placeholder='Nome da marca';ref.input.hidden=!other;ref.wrap.insertBefore(choice.container,ref.input);return ref;
+    }
+    function customPackaging(item,index){
+      const group=el('div','custom-packaging'),label=field(item,index,'customLabel','Nome da embalagem'),amount=field(item,index,'customAmount','Conteúdo por embalagem'),wrap=el('div','field'),measureLabel=el('label','','Medida');
+      const choice=choiceMenu(item,index,'measure','Medida',Core.customMeasures(item),state.values[item.id].customUnit.measure,id=>{if(state.values[item.id].customUnit.measure!==id)changed(item.id,'customMeasure',id);});
+      choice.trigger.id=`offer-${index}-customMeasure`;measureLabel.htmlFor=choice.trigger.id;
+      const error=el('p','field-error');error.id=choice.trigger.id+'-error';error.hidden=true;choice.trigger.setAttribute('aria-describedby',error.id);wrap.append(measureLabel,choice.container,error);
+      const row=el('div','custom-content-row');row.append(amount.wrap,wrap);label.input.placeholder='Ex.: saco, caixa ou pote';amount.input.placeholder='Ex.: 5';group.append(label.wrap,row);group.hidden=state.values[item.id].unitId!=='__custom__';
+      return {group,customLabel:label,customAmount:amount,customMeasure:{wrap,input:choice.trigger,error,label:measureLabel}};
+    }
     function itemCard(item,index){
-      const card=el('section','item-card'),head=el('div','item-header'),name=el('h3','',item.name);name.id='item-'+index;head.append(el('span','item-number',String(index+1).padStart(2,'0')),name);card.setAttribute('aria-labelledby',name.id);card.append(head);
+      const card=el('section','item-card'),head=el('div','item-header'),name=el('h3','',item.name),availability=el('button','availability-toggle','Indisponível');
+      name.id='item-'+index;availability.type='button';availability.setAttribute('aria-pressed',String(state.values[item.id].unavailable));availability.setAttribute('aria-label',`Indisponível: ${item.name}`);availability.title=state.values[item.id].unavailable?'Voltar a ofertar este item':'Marcar item como indisponível';availability.addEventListener('click',()=>changed(item.id,'unavailable',!state.values[item.id].unavailable));
+      head.append(name,availability);card.setAttribute('aria-labelledby',name.id);card.append(head);
       const requestedUnit=item.units.find(unit=>unit.id===item.unitId);card.append(el('p','requested',`Solicitado: ${number(item.quantity)} × ${requestedUnit.label}`));
-      const availability=el('fieldset','availability');availability.append(el('legend','',`Disponibilidade de ${item.name}`));
-      for(const [value,text,symbol]of [['available','Tenho','check'],['unavailable','Indisponível','x']]){
-        const label=el('label'),input=el('input'),copy=el('span');input.type='radio';input.name='availability-'+index;input.value=value;input.checked=(value==='unavailable')===state.values[item.id].unavailable;
-        input.addEventListener('change',()=>changed(item.id,'unavailable',value==='unavailable'));copy.append(icon(symbol),document.createTextNode(text));label.append(input,copy);availability.append(label);
-      }
-      card.append(availability);
-      const fields=el('div','offer-fields'),brand=field(item,index,'brand','Marca (opcional)'),quantity=field(item,index,'quantity','Quantidade ofertada'),unitId=field(item,index,'unitId','Embalagem / unidade','select'),unitPrice=field(item,index,'unitPrice','Preço por unidade'),row=el('div','offer-row');
-      brand.input.placeholder='Nome da marca';row.append(quantity.wrap,unitId.wrap);fields.append(brand.wrap,row,unitPrice.wrap);
+      const fields=el('div','offer-fields'),brand=brandField(item,index),quantity=field(item,index,'quantity','Quantidade ofertada'),unitId=field(item,index,'unitId','Embalagem / unidade','select'),unitPrice=field(item,index,'unitPrice','Preço por unidade'),row=el('div','offer-row'),custom=customPackaging(item,index);
+      row.append(quantity.wrap,unitId.wrap);fields.append(brand.wrap,row,custom.group,unitPrice.wrap);
       const itemTotal=el('p','item-total','Total deste item'),total=el('strong','','—');itemTotal.append(total);fields.append(itemTotal);
-      const unavailable=el('p','unavailable-copy','Este item será informado como indisponível.');fields.hidden=state.values[item.id].unavailable;unavailable.hidden=!fields.hidden;card.append(fields,unavailable);
-      state.fields.set(item.id,{brand,quantity,unitId,unitPrice,fields,unavailable,total,priceLabel:unitPrice.label});return card;
+      fields.hidden=state.values[item.id].unavailable;card.append(fields);
+      state.fields.set(item.id,{brand,quantity,unitId,unitPrice,fields,availability,total,priceLabel:unitPrice.label,customFields:custom.group,customLabel:custom.customLabel,customAmount:custom.customAmount,customMeasure:custom.customMeasure});return card;
     }
     function renderForm(message=''){
       closeUnitChoice();
