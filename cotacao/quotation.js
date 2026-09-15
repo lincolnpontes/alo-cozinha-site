@@ -4,7 +4,7 @@
   const ENDPOINT='https://sxbcjzshcjxzladwptiu.supabase.co/functions/v1/alo-cozinha-sync?publicquotation=1';
   const currency=(value,precision=2)=>Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:precision});
   const number=value=>Number(value).toLocaleString('pt-BR',{maximumFractionDigits:6});
-  const date=value=>{const parsed=new Date(value);return Number.isFinite(parsed.getTime())?parsed.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}):'Prazo não informado';};
+  const date=value=>{const parsed=new Date(value);return Number.isFinite(parsed.getTime())?parsed.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'Prazo não informado';};
   const el=(tag,className,text)=>{const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=String(text);return node;};
   function icon(name){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
@@ -39,7 +39,7 @@
     const root=options.root||document.getElementById('quotationApp'),token=options.token||'';
     const transport=options.transport||((action,payload)=>request(token,action,payload));
     const state={quotation:null,values:null,pending:null,busy:false,loading:false,dirty:false,key:'',storage:null,localSaved:false,fields:new Map(),dialog:null,unitChoice:null};
-    let progress,totalAmount,summaryCount,draftNote,formNotice;
+    let progress,totalAmount,summaryCount,formNotice;
     try{state.storage=options.storage===false?null:options.storage||global.localStorage;state.key=await draftKey(token);}catch(error){state.storage=null;}
     function saveDraft(){
       if(!state.quotation||!state.values||!state.key||!state.storage)return;
@@ -47,7 +47,6 @@
         const deadline=Date.parse(state.quotation.expiresAt),expiresAt=Math.min(Date.now()+7*86400000,Number.isFinite(deadline)?deadline+86400000:Infinity);
         state.storage.setItem(state.key,JSON.stringify({quotationId:state.quotation.id,revision:state.quotation.revision,expiresAt,values:state.values,pending:state.pending,dirty:state.dirty}));state.localSaved=true;
       }catch(error){state.localSaved=false;}
-      if(draftNote)draftNote.textContent=state.localSaved?'Rascunho salvo neste navegador.':'Rascunho mantido enquanto esta página estiver aberta.';
     }
     function savedDraft(){
       try{const saved=JSON.parse(state.storage?.getItem(state.key)||'null');if(saved?.quotationId===state.quotation.id&&saved.expiresAt>Date.now())return saved;}catch(error){}
@@ -65,10 +64,9 @@
     }
     function header(quotation){
       const panel=el('section','request-summary');
-      panel.append(el('span','eyebrow','Fornecedor'),el('h1','',quotation.supplierName||'Sua cotação'));
-      const recipient=el('p','recipient','Solicitado por ');recipient.append(el('strong','',quotation.restaurantName||'Restaurante'));panel.append(recipient);
-      const deadline=el('p','deadline');deadline.append(icon('clock'),el('span','',`Responder até ${date(quotation.expiresAt)}`));panel.append(deadline);
-      if(quotation.title&&quotation.title!=='Cotação de compras')panel.append(el('p','quotation-title',quotation.title));
+      const supplier=el('div','request-line');supplier.append(el('span','eyebrow','Fornecedor'),el('h1','',quotation.supplierName||'Sua cotação'));
+      const recipient=el('div','request-line');recipient.append(el('span','eyebrow','Solicitante'),el('strong','',quotation.restaurantName||'Restaurante'));
+      const deadline=el('p','deadline');deadline.append(icon('clock'),el('span','',`Responder até ${date(quotation.expiresAt)}`));panel.append(supplier,recipient,deadline);
       return panel;
     }
     function answerList(quotation,answers){
@@ -112,7 +110,7 @@
       if(field==='unitId'){state.values[itemId].quantity='';refs.quantity.input.value='';}
       if(['unitId','customAmount','customMeasure'].includes(field)){state.values[itemId].unitPrice='';refs.unitPrice.input.value='';}
       for(const ref of Object.values(refs)){if(ref?.input){ref.input.removeAttribute('aria-invalid');ref.error.hidden=true;}}
-      refs.fields.hidden=state.values[itemId].unavailable;refs.availability.setAttribute('aria-pressed',String(state.values[itemId].unavailable));
+      refs.fields.hidden=state.values[itemId].unavailable;refs.brand.wrap.hidden=state.values[itemId].unavailable;refs.availability.setAttribute('aria-pressed',String(state.values[itemId].unavailable));
       refs.availability.title=state.values[itemId].unavailable?'Voltar a ofertar este item':'Marcar item como indisponível';
       refs.customFields.hidden=state.values[itemId].unitId!=='__custom__';
       updateTotals();saveDraft();
@@ -130,13 +128,17 @@
       const choice={container,trigger,menu,copy};
       for(const [position,unit]of options.entries()){
         const option=el('button','unit-choice-option');option.type='button';option.setAttribute('role','option');option.setAttribute('aria-selected',String(unit.id===trigger.value));option.append(el('span','',unit.label),icon('check'));
+        option.dataset.value=unit.id;option.disabled=Boolean(unit.disabled);if(unit.disabled)option.classList.add('brand-rejected');
+        if(unit.separator)menu.append(el('div','brand-separator',unit.separator));
         option.addEventListener('click',()=>{
-          trigger.value=unit.id;copy.textContent=unit.label;onPick(unit.id);
-          Array.from(menu.children).forEach((node,i)=>node.setAttribute('aria-selected',String(options[i].id===unit.id)));closeUnitChoice(true);
+          if(onPick(unit.id)===false){closeUnitChoice();return;}
+          trigger.value=unit.id;copy.textContent=unit.label;
+          menu.querySelectorAll('[role=option]').forEach(node=>node.setAttribute('aria-selected',String(node.dataset.value===unit.id)));closeUnitChoice(true);
         });
         option.addEventListener('keydown',event=>{
-          const steps={ArrowDown:Math.min(options.length-1,position+1),ArrowUp:Math.max(0,position-1),Home:0,End:options.length-1};
-          if(Object.hasOwn(steps,event.key)){event.preventDefault();menu.children[steps[event.key]].focus();}
+          const buttons=Array.from(menu.querySelectorAll('[role=option]:not(:disabled)')),cursor=buttons.indexOf(option);
+          const steps={ArrowDown:Math.min(buttons.length-1,cursor+1),ArrowUp:Math.max(0,cursor-1),Home:0,End:buttons.length-1};
+          if(Object.hasOwn(steps,event.key)){event.preventDefault();buttons[steps[event.key]].focus();}
           else if(event.key==='Escape'){event.preventDefault();closeUnitChoice(true);}
         });
         menu.append(option);
@@ -170,15 +172,36 @@
       wrap.append(error);return {wrap,input,error,label:labelNode};
     }
     function brandField(item,index){
-      const ref=field(item,index,'brand','Marca (opcional)'),value=state.values[item.id],brands=Array.from(new Set((item.brands||[]).filter(brand=>typeof brand==='string'&&brand.trim()).map(brand=>brand.trim())));
-      const matched=brands.indexOf(value.brand),other=value.brandMode==='other'||Boolean(value.brand&&matched<0),selected=other?'other':matched>=0?'brand-'+matched:'none';
-      value.brandMode=other?'other':'';if(other)value.otherBrand=value.brand;
-      const options=[{id:'none',label:'Sem marca'},...brands.map((label,position)=>({id:'brand-'+position,label})),{id:'other',label:'Outra marca'}];
+      const ref=field(item,index,'brand','Marca'),value=state.values[item.id],key=text=>String(text||'').trim().toLocaleLowerCase('pt-BR');
+      const rejected=Array.from(new Set(item.rejectedBrands||[])),brands=Array.from(new Set(item.brands||[])).filter(brand=>!rejected.some(name=>key(name)===key(brand)));
+      const match=brands.findIndex(name=>key(name)===key(value.brand)),selected=match>=0?'brand-'+match:value.brand?'other':'';
+      value.brandMode=selected==='other'?'other':'';
+      const options=[...brands.map((label,position)=>({id:'brand-'+position,label})),{id:'other',label:'Outra marca'},...rejected.map((label,position)=>({id:'rejected-'+position,label,disabled:true,...(!position?{separator:'Marcas não aceitas'}:{})}))];
       const choice=choiceMenu(item,index,'brand','Marca',options,selected,id=>{
-        value.brandMode=id==='other'?'other':'';const next=id==='other'?value.otherBrand||'':id==='none'?'':brands[Number(id.slice(6))];
-        ref.input.value=next;ref.input.hidden=id!=='other';changed(item.id,'brand',next);
+        if(id==='other'){openOtherBrand();return false;}
+        setBrand(brands[Number(id.slice(6))]);
       });
-      choice.trigger.id=`offer-${index}-brand-choice`;ref.label.htmlFor=choice.trigger.id;ref.input.setAttribute('aria-label',`Outra marca de ${item.name}`);ref.input.placeholder='Nome da marca';ref.input.hidden=!other;ref.wrap.insertBefore(choice.container,ref.input);return ref;
+      function setBrand(name){
+        const matched=brands.findIndex(brand=>key(brand)===key(name));value.brandMode=matched<0?'other':'';value.otherBrand=matched<0?name:'';
+        changed(item.id,'brand',matched>=0?brands[matched]:name);refreshBrand();
+      }
+      function refreshBrand(){
+        choice.copy.textContent=value.brand||'Selecionar marca';choice.trigger.classList.toggle('brand-other',Boolean(value.brand)&&!brands.some(name=>key(name)===key(value.brand)));
+        choice.trigger.value=value.brand;choice.menu.querySelectorAll('[role=option]').forEach(node=>node.setAttribute('aria-selected',String(node.dataset.value===(value.brandMode==='other'?'other':'brand-'+brands.findIndex(name=>key(name)===key(value.brand))))));
+      }
+      function openOtherBrand(){
+        const dialog=el('dialog','review-dialog other-brand-dialog'),title=el('h2','','Outra marca'),wrap=el('div','field'),label=el('label','','Marca'),input=el('input'),error=el('p','field-error'),actions=el('div','review-actions');
+        title.id='otherBrandTitle';dialog.setAttribute('aria-labelledby',title.id);input.id='otherBrandName';label.htmlFor=input.id;input.maxLength=120;input.autocomplete='off';input.value=value.brandMode==='other'?value.brand:'';error.hidden=true;error.setAttribute('role','alert');
+        const cancel=button('Cancelar','secondary',()=>dialog.close()),save=button('Salvar','primary',()=>{
+          const name=input.value.trim();if(!name){error.textContent='Informe a marca.';error.hidden=false;input.focus();return;}
+          if(rejected.some(brand=>key(brand)===key(name))){error.textContent='Esta marca não é aceita pelo restaurante.';error.hidden=false;input.focus();return;}
+          if(/[\u0000-\u001f]/.test(name)){error.textContent='Confira o nome da marca.';error.hidden=false;return;}
+          setBrand(name);dialog.close();
+        });
+        input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();save.click();}});wrap.append(label,input,error);actions.append(cancel,save);dialog.append(title,wrap,actions);document.body.append(dialog);
+        dialog.addEventListener('close',()=>{dialog.remove();choice.trigger.focus({preventScroll:true});});dialog.showModal();input.focus({preventScroll:true});
+      }
+      ref.input.remove();ref.input=choice.trigger;choice.trigger.id=`offer-${index}-brand-choice`;ref.label.htmlFor=choice.trigger.id;choice.trigger.setAttribute('aria-describedby',ref.error.id);ref.wrap.insertBefore(choice.container,ref.error);refreshBrand();return ref;
     }
     function customPackaging(item,index){
       const group=el('div','custom-packaging'),label=field(item,index,'customLabel','Nome da embalagem'),amount=field(item,index,'customAmount','Conteúdo por embalagem'),wrap=el('div','field'),measureLabel=el('label','','Medida');
@@ -191,21 +214,22 @@
     function itemCard(item,index){
       const card=el('section','item-card'),head=el('div','item-header'),name=el('h3','',item.name),availability=el('button','availability-toggle','Indisponível');
       name.id='item-'+index;availability.type='button';availability.setAttribute('aria-pressed',String(state.values[item.id].unavailable));availability.setAttribute('aria-label',`Indisponível: ${item.name}`);availability.title=state.values[item.id].unavailable?'Voltar a ofertar este item':'Marcar item como indisponível';availability.addEventListener('click',()=>changed(item.id,'unavailable',!state.values[item.id].unavailable));
-      head.append(name,availability);card.setAttribute('aria-labelledby',name.id);card.append(head);
-      const requestedUnit=item.units.find(unit=>unit.id===item.unitId);card.append(el('p','requested',`Solicitado: ${number(item.quantity)} × ${requestedUnit.label}`));
+      card.setAttribute('aria-labelledby',name.id);
+      const requestedUnit=item.units.find(unit=>unit.id===item.unitId),requested=el('p','requested',`Solicitado: ${number(item.quantity)} × ${requestedUnit.label}`);head.append(name,requested);card.append(head);
       const fields=el('div','offer-fields'),brand=brandField(item,index),quantity=field(item,index,'quantity','Quantidade ofertada'),unitId=field(item,index,'unitId','Embalagem / unidade','select'),unitPrice=field(item,index,'unitPrice','Preço por unidade'),row=el('div','offer-row'),custom=customPackaging(item,index);
-      row.append(quantity.wrap,unitId.wrap);fields.append(brand.wrap,row,custom.group,unitPrice.wrap);
-      const itemTotal=el('p','item-total','Total deste item'),total=el('strong','','—');itemTotal.append(total);fields.append(itemTotal);
+      const brandRow=el('div','brand-row');brandRow.append(brand.wrap,availability);brand.wrap.hidden=state.values[item.id].unavailable;card.append(brandRow);
+      row.append(quantity.wrap,unitId.wrap);fields.append(row,custom.group);
+      const itemTotal=el('div','item-total'),total=el('strong','','—'),priceRow=el('div','price-total-row');itemTotal.append(el('span','','Total'),total);priceRow.append(unitPrice.wrap,itemTotal);fields.append(priceRow);
       fields.hidden=state.values[item.id].unavailable;card.append(fields);
       state.fields.set(item.id,{brand,quantity,unitId,unitPrice,fields,availability,total,priceLabel:unitPrice.label,customFields:custom.group,customLabel:custom.customLabel,customAmount:custom.customAmount,customMeasure:custom.customMeasure});return card;
     }
     function renderForm(message=''){
       closeUnitChoice();
       state.fields.clear();const form=el('form');form.noValidate=true;form.addEventListener('submit',event=>{event.preventDefault();review();});
-      const heading=el('div','section-heading');progress=el('span','progress');progress.setAttribute('role','status');heading.append(el('h2','','Sua proposta'),progress);form.append(heading,el('p','section-help','Informe o que você pode fornecer e o preço de cada embalagem.'));
+      const heading=el('div','section-heading');progress=el('span','progress');progress.setAttribute('role','status');heading.append(el('h2','','Proposta'),progress);form.append(heading);
       formNotice=el('div');if(message)formNotice.append(notice(message,'warning'));form.append(formNotice);
       const list=el('div','item-list');state.quotation.items.forEach((item,index)=>list.append(itemCard(item,index)));form.append(list);
-      const actions=el('div','proposal-actions'),summary=el('div','proposal-summary');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));draftNote=el('p','draft-note',state.localSaved?'Rascunho salvo neste navegador.':'Seus dados serão enviados após a confirmação.');actions.append(summary,submit,draftNote);form.append(actions);
+      const actions=el('div','proposal-actions'),summary=el('div','proposal-summary');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));actions.append(summary,submit);form.append(actions);
       root.replaceChildren(header(state.quotation),form);root.setAttribute('aria-busy','false');updateTotals();
     }
     function showErrors(errors){

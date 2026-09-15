@@ -82,6 +82,8 @@
       if(!Number.isFinite(quantity)||quantity<=0||quantity>1e9)errors.push({itemId:item.id,field:'quantity',message:'Informe uma quantidade maior que zero.'});
       if(!Number.isFinite(unitPrice)||unitPrice<=0||unitPrice>1e8)errors.push({itemId:item.id,field:'unitPrice',message:'Informe um preço válido para essa embalagem.'});
       else if(Math.abs(unitPrice-Number(unitPrice.toFixed(4)))>1e-9)errors.push({itemId:item.id,field:'unitPrice',message:'Use até 4 casas decimais no preço.'});
+      if(!brand)errors.push({itemId:item.id,field:'brand',message:'Informe a marca deste produto.'});
+      if((item.rejectedBrands||[]).some(name=>clean(name).toLocaleLowerCase('pt-BR')===brand.toLocaleLowerCase('pt-BR')))errors.push({itemId:item.id,field:'brand',message:'Esta marca não é aceita pelo restaurante.'});
       if(brand.length>120||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(brand))errors.push({itemId:item.id,field:'brand',message:'Confira a marca e use até 120 caracteres.'});
       answers.push({itemId:item.id,unitId:value.unitId,brand,quantity,unitPrice,unavailable:false,...(customUnit?{customUnit}:{})});
     }
