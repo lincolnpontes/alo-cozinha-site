@@ -45,6 +45,8 @@
     const unit=offerUnit(item,answer);
     return unit?.label||(answer?.unitId==='__custom__'?'embalagem':'unidade');
   }
+  function priceUnitLabel(item,answer){return answer?.priceBasis==='base'?(offerUnit(item,answer)?.base||'unidade'):offerUnitLabel(item,answer);}
+  function offerTotal(item,answer){const factor=answer?.priceBasis==='base'?Number(offerUnit(item,answer)?.factor):1;return Number(answer?.quantity)*Number(answer?.unitPrice)*factor;}
   function quotationFromResponse(response){
     const q=response?.quotation;
     if(response?.status!=='ok'||!q||!q.id||!['open','answered','ordered'].includes(q.status)||!Array.isArray(q.items)||!q.items.length||q.items.length>200)throw new Error('invalid_response');
@@ -60,7 +62,7 @@
     for(const item of quotation.items){
       const answer=(previous&&Object.hasOwn(previous,item.id)?previous[item.id]:null)||(quotation.answers||[]).find(value=>value.itemId===item.id);
       const allowed=customMeasures(item),customValid=answer?.unitId==='__custom__'&&allowed.some(measure=>measure.id===answer.customUnit?.measure),unitValid=customValid||item.units.some(unit=>unit.id===answer?.unitId),unitId=unitValid?answer.unitId:item.unitId;
-      values[item.id]={unavailable:answer?.unavailable===true,unitId,brand:clean(answer?.brand).slice(0,120),brandMode:answer?.brandMode||'',otherBrand:clean(answer?.otherBrand).slice(0,120),quantity:answer?(unitValid?String(answer.quantity??''):''):inputNumber(item.quantity),unitPrice:answer&&unitValid?String(answer.unitPrice??''):'',customUnit:{label:clean(answer?.customUnit?.label).slice(0,120),amount:String(answer?.customUnit?.amount??''),measure:allowed.some(measure=>measure.id===answer?.customUnit?.measure)?answer.customUnit.measure:allowed[0]?.id||''}};
+      values[item.id]={priceBasis:answer?.priceBasis==='base'?'base':'package',unavailable:answer?.unavailable===true,unitId,brand:clean(answer?.brand).slice(0,120),brandMode:answer?.brandMode||'',otherBrand:clean(answer?.otherBrand).slice(0,120),quantity:answer?(unitValid?String(answer.quantity??''):''):inputNumber(item.quantity),unitPrice:answer&&unitValid?String(answer.unitPrice??''):'',customUnit:{label:clean(answer?.customUnit?.label).slice(0,120),amount:String(answer?.customUnit?.amount??''),measure:allowed.some(measure=>measure.id===answer?.customUnit?.measure)?answer.customUnit.measure:allowed[0]?.id||''}};
     }
     return values;
   }
@@ -85,15 +87,17 @@
       if(!brand)errors.push({itemId:item.id,field:'brand',message:'Informe a marca deste produto.'});
       if((item.rejectedBrands||[]).some(name=>clean(name).toLocaleLowerCase('pt-BR')===brand.toLocaleLowerCase('pt-BR')))errors.push({itemId:item.id,field:'brand',message:'Esta marca não é aceita pelo restaurante.'});
       if(brand.length>120||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(brand))errors.push({itemId:item.id,field:'brand',message:'Confira a marca e use até 120 caracteres.'});
-      answers.push({itemId:item.id,unitId:value.unitId,brand,quantity,unitPrice,unavailable:false,...(customUnit?{customUnit}:{})});
+      if(value.priceBasis&& !['package','base'].includes(value.priceBasis))errors.push({itemId:item.id,field:'unitPrice',message:'Escolha a unidade do preço.'});
+      if(value.priceBasis==='base'){const resolved=offerUnit(item,{...value,customUnit});if(!resolved?.factor||!['kg','L','un'].includes(resolved.base))errors.push({itemId:item.id,field:'unitPrice',message:'Informe o conteúdo da embalagem para cotar por medida.'});}
+      answers.push({itemId:item.id,unitId:value.unitId,brand,quantity,unitPrice,unavailable:false,...(value.priceBasis==='base'?{priceBasis:'base'}:{}),...(customUnit?{customUnit}:{})});
     }
     return {answers,errors};
   }
-  function summary(answers){
+  function summary(answers,items=[]){
     const available=answers.filter(answer=>!answer.unavailable&&Number.isFinite(answer.quantity)&&Number.isFinite(answer.unitPrice));
-    return {count:available.length,total:available.reduce((sum,answer)=>sum+answer.quantity*answer.unitPrice,0),unavailable:answers.filter(answer=>answer.unavailable).length};
+    return {count:available.length,total:available.reduce((sum,answer)=>sum+offerTotal(items.find(item=>item.id===answer.itemId)||{units:[]},answer),0),unavailable:answers.filter(answer=>answer.unavailable).length};
   }
   function signature(revision,answers){return JSON.stringify({expectedRevision:revision,answers});}
-  const api={tokenFromFragment,decimal,inputNumber,formatPrice,priceFromTyping,priceFromPaste,customMeasures,offerUnit,offerUnitLabel,quotationFromResponse,draftForQuotation,buildAnswers,summary,signature};
+  const api={tokenFromFragment,decimal,inputNumber,formatPrice,priceFromTyping,priceFromPaste,customMeasures,offerUnit,offerUnitLabel,priceUnitLabel,offerTotal,quotationFromResponse,draftForQuotation,buildAnswers,summary,signature};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.AloQuotationCore=api;
 })(typeof window==='object'?window:globalThis);

@@ -65,7 +65,8 @@
     function header(quotation){
       const panel=el('section','request-summary');
       const supplier=el('div','request-line');supplier.append(el('span','eyebrow','Fornecedor'),el('h1','',quotation.supplierName||'Sua cotação'));
-      const recipient=el('div','request-line');recipient.append(el('span','eyebrow','Solicitante'),el('strong','',quotation.restaurantName||'Restaurante'));
+      const recipient=el('div','request-line'),identity=el('div','request-identity');identity.append(el('strong','',quotation.legalName||quotation.restaurantName||'Restaurante'));if(quotation.cnpj)identity.append(el('small','', 'CNPJ: '+String(quotation.cnpj).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5')));recipient.append(el('span','eyebrow','Solicitante'),identity);
+      const brand=document.querySelector('.brand-inner');if(brand){brand.replaceChildren();if(/^data:image\/(png|jpeg|webp);base64,/i.test(quotation.logoDataUrl||'')){const logo=el('img','restaurant-logo');logo.src=quotation.logoDataUrl;logo.alt=quotation.restaurantName||'Restaurante';brand.append(logo);}else brand.append(el('strong','restaurant-name',quotation.restaurantName||'Alô Cozinha'));}
       const deadline=el('p','deadline');deadline.append(icon('clock'),el('span','',`Responder até ${date(quotation.expiresAt)}`));panel.append(supplier,recipient,deadline);
       return panel;
     }
@@ -78,7 +79,7 @@
         else{
           const label=Core.offerUnitLabel(item,answer);
           row.append(el('p','',`${number(answer.quantity)} × ${label}${answer.brand?' · '+answer.brand:''}`));
-          row.append(el('p','answer-price',`${currency(answer.unitPrice,4)} por ${label} · Total ${currency(answer.quantity*answer.unitPrice)}`));
+          row.append(el('p','answer-price',`${currency(answer.unitPrice,4)} por ${Core.priceUnitLabel(item,answer)} · Total ${currency(Core.offerTotal(item,answer))}`));
         }
         list.append(row);
       }
@@ -90,16 +91,16 @@
       panel.append(mark,heading,el('p','',closed?'O restaurante encerrou esta cotação. Não é mais possível enviar ou alterar a proposta.':`${q.restaurantName||'O restaurante'} recebeu sua proposta.`));
       if(q.submittedAt)panel.append(el('p','',`Enviada em ${date(q.submittedAt)}`));
       if(!closed)panel.append(el('p','','Você pode atualizar os valores até o prazo da cotação.'));
-      if((q.answers||[]).length){panel.append(el('h2','submitted-heading','Sua resposta'),answerList(q,q.answers));const totals=Core.summary(q.answers),line=el('div','review-total','Total ofertado');line.append(el('strong','',currency(totals.total)));panel.append(line);}
+      if((q.answers||[]).length){panel.append(el('h2','submitted-heading','Sua resposta'),answerList(q,q.answers));const totals=Core.summary(q.answers,q.items),line=el('div','review-total','Total ofertado');line.append(el('strong','',currency(totals.total)));panel.append(line);}
       if(!closed)panel.append(button('Editar proposta','secondary',()=>{state.values=Core.draftForQuotation(q);state.pending=null;renderForm();}));
       root.replaceChildren(header(q),panel);panel.classList.add('receipt-panel');root.setAttribute('aria-busy','false');heading.focus({preventScroll:true});
     }
     function updateTotals(){
-      const built=Core.buildAnswers(state.quotation,state.values),invalid=new Set(built.errors.map(error=>error.itemId)),totals=Core.summary(built.answers);
-      progress.textContent=`${state.quotation.items.length-invalid.size} de ${state.quotation.items.length} respondidos`;
+      const built=Core.buildAnswers(state.quotation,state.values),invalid=new Set(built.errors.map(error=>error.itemId)),totals=Core.summary(built.answers,state.quotation.items);
+      progress.textContent='';progress.hidden=true;
       totalAmount.textContent=currency(totals.total);
       summaryCount.textContent=`${totals.count} ${totals.count===1?'item ofertado':'itens ofertados'}${totals.unavailable?' · '+totals.unavailable+' indisponíveis':''}`;
-      for(const item of state.quotation.items){const refs=state.fields.get(item.id),value=state.values[item.id],quantity=Core.decimal(value.quantity),price=Core.decimal(value.unitPrice);refs.total.textContent=!value.unavailable&&quantity>0&&price>0?currency(quantity*price):'—';refs.priceLabel.textContent=`Preço por ${Core.offerUnitLabel(item,value)}`;}
+      for(const item of state.quotation.items){const refs=state.fields.get(item.id),value=state.values[item.id],quantity=Core.decimal(value.quantity),price=Core.decimal(value.unitPrice);refs.total.textContent=!value.unavailable&&quantity>0&&price>0?currency(Core.offerTotal(item,{...value,quantity,unitPrice:price})):'—';refs.refreshPriceUnit();}
     }
     function changed(itemId,field,value){
       const customKey={customLabel:'label',customAmount:'amount',customMeasure:'measure'}[field];
@@ -107,8 +108,8 @@
       if(field==='brand'&&state.values[itemId].brandMode==='other')state.values[itemId].otherBrand=value;
       state.dirty=true;state.pending=null;
       const refs=state.fields.get(itemId);
-      if(field==='unitId'){state.values[itemId].quantity='';refs.quantity.input.value='';}
-      if(['unitId','customAmount','customMeasure'].includes(field)){state.values[itemId].unitPrice='';refs.unitPrice.input.value='';}
+      if(field==='unitId'){state.values[itemId].quantity='';refs.quantity.input.value='';const resolved=Core.offerUnit(state.quotation.items.find(item=>item.id===itemId),state.values[itemId]);if(!resolved?.factor)state.values[itemId].priceBasis='package';}
+      if(['unitId','priceBasis'].includes(field)||(['customAmount','customMeasure'].includes(field)&&state.values[itemId].priceBasis!=='base')){state.values[itemId].unitPrice='';refs.unitPrice.input.value='';}
       for(const ref of Object.values(refs)){if(ref?.input){ref.input.removeAttribute('aria-invalid');ref.error.hidden=true;}}
       refs.fields.hidden=state.values[itemId].unavailable;refs.brand.wrap.hidden=state.values[itemId].unavailable;refs.availability.setAttribute('aria-pressed',String(state.values[itemId].unavailable));
       refs.availability.title=state.values[itemId].unavailable?'Voltar a ofertar este item':'Marcar item como indisponível';
@@ -143,7 +144,7 @@
         });
         menu.append(option);
       }
-      function open(){closeUnitChoice();menu.hidden=false;trigger.setAttribute('aria-expanded','true');state.unitChoice=choice;(menu.querySelector('[aria-selected="true"]')||menu.firstElementChild)?.focus({preventScroll:true});}
+      function open(){closeUnitChoice();menu.hidden=false;const rect=trigger.getBoundingClientRect(),below=window.innerHeight-rect.bottom-12,above=rect.top-12,useAbove=below<220&&above>below;menu.style.top=useAbove?'auto':'calc(100% + 5px)';menu.style.bottom=useAbove?'calc(100% + 5px)':'auto';menu.style.maxHeight=Math.max(100,Math.min(430,useAbove?above:below))+'px';trigger.setAttribute('aria-expanded','true');state.unitChoice=choice;(menu.querySelector('[aria-selected="true"]')||menu.firstElementChild)?.focus({preventScroll:true});}
       trigger.addEventListener('click',()=>menu.hidden?open():closeUnitChoice());
       trigger.addEventListener('keydown',event=>{if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();open();}else if(event.key==='Escape')closeUnitChoice();});
       container.addEventListener('focusout',event=>{if(state.unitChoice===choice&&!container.contains(event.relatedTarget))closeUnitChoice();});
@@ -212,16 +213,18 @@
       return {group,customLabel:label,customAmount:amount,customMeasure:{wrap,input:choice.trigger,error,label:measureLabel}};
     }
     function itemCard(item,index){
-      const card=el('section','item-card'),head=el('div','item-header'),name=el('h3','',item.name),availability=el('button','availability-toggle','Indisponível');
+      const card=el('section','item-card'),head=el('div','item-header'),name=el('h3','',item.name),availability=el('button','availability-toggle','Item\nindisponível');
       name.id='item-'+index;availability.type='button';availability.setAttribute('aria-pressed',String(state.values[item.id].unavailable));availability.setAttribute('aria-label',`Indisponível: ${item.name}`);availability.title=state.values[item.id].unavailable?'Voltar a ofertar este item':'Marcar item como indisponível';availability.addEventListener('click',()=>changed(item.id,'unavailable',!state.values[item.id].unavailable));
       card.setAttribute('aria-labelledby',name.id);
-      const requestedUnit=item.units.find(unit=>unit.id===item.unitId),requested=el('p','requested',`Solicitado: ${number(item.quantity)} × ${requestedUnit.label}`);head.append(name,requested);card.append(head);
-      const fields=el('div','offer-fields'),brand=brandField(item,index),quantity=field(item,index,'quantity','Quantidade ofertada'),unitId=field(item,index,'unitId','Embalagem / unidade','select'),unitPrice=field(item,index,'unitPrice','Preço por unidade'),row=el('div','offer-row'),custom=customPackaging(item,index);
+      const requestedUnit=item.units.find(unit=>unit.id===item.unitId),requested=el('p','requested',`${number(item.quantity)} × ${requestedUnit.label}`);head.append(name,requested);card.append(head);
+      const fields=el('div','offer-fields'),brand=brandField(item,index),quantity=field(item,index,'quantity','Qtde'),unitId=field(item,index,'unitId','Unidade','select'),unitPrice=field(item,index,'unitPrice','Preço por unidade'),row=el('div','offer-row'),custom=customPackaging(item,index);
       const brandRow=el('div','brand-row');brandRow.append(brand.wrap,availability);brand.wrap.hidden=state.values[item.id].unavailable;card.append(brandRow);
       row.append(quantity.wrap,unitId.wrap);fields.append(row,custom.group);
+      const priceHeading=el('div','price-unit-heading');unitPrice.label.textContent='Preço por';unitPrice.label.replaceWith(priceHeading);priceHeading.append(unitPrice.label);
+      let priceKey='';function refreshPriceUnit(){const value=state.values[item.id],resolved=Core.offerUnit(item,value),canBase=resolved?.factor>0&&['kg','L','un'].includes(resolved.base),label=Core.offerUnitLabel(item,value),key=JSON.stringify([label,canBase,resolved?.base,value.priceBasis]);if(key===priceKey)return;priceKey=key;priceHeading.replaceChildren(unitPrice.label);const options=[{id:'package',label}];if(canBase&&!(resolved.factor===1&&label===resolved.base))options.push({id:'base',label:resolved.base});if(options.length===1){unitPrice.label.textContent='Preço por '+(value.priceBasis==='base'?resolved.base:label);}else{unitPrice.label.textContent='Preço por';const choice=choiceMenu(item,index,'priceBasis','Unidade do preço',options,value.priceBasis||'package',id=>{if(id!==value.priceBasis)changed(item.id,'priceBasis',id);});priceHeading.append(choice.container);}}
       const itemTotal=el('div','item-total'),total=el('strong','','—'),priceRow=el('div','price-total-row');itemTotal.append(el('span','','Total'),total);priceRow.append(unitPrice.wrap,itemTotal);fields.append(priceRow);
       fields.hidden=state.values[item.id].unavailable;card.append(fields);
-      state.fields.set(item.id,{brand,quantity,unitId,unitPrice,fields,availability,total,priceLabel:unitPrice.label,customFields:custom.group,customLabel:custom.customLabel,customAmount:custom.customAmount,customMeasure:custom.customMeasure});return card;
+      state.fields.set(item.id,{brand,quantity,unitId,unitPrice,fields,availability,total,priceLabel:unitPrice.label,refreshPriceUnit,customFields:custom.group,customLabel:custom.customLabel,customAmount:custom.customAmount,customMeasure:custom.customMeasure});return card;
     }
     function renderForm(message=''){
       closeUnitChoice();
@@ -246,7 +249,7 @@
       const dialog=el('dialog','review-dialog');state.dialog=dialog;dialog.setAttribute('aria-labelledby','reviewTitle');dialog.addEventListener('cancel',event=>{if(state.busy)event.preventDefault();});
       const title=el('h2','','Revisar proposta');title.id='reviewTitle';title.tabIndex=-1;
       const body=el('div','review-body');body.append(el('p','',`Confira os dados que serão enviados para ${state.quotation.restaurantName}.`),answerList(state.quotation,answers));
-      const totals=el('div','review-total','Total ofertado');totals.append(el('strong','',currency(Core.summary(answers).total)));body.append(totals);
+      const totals=el('div','review-total','Total ofertado');totals.append(el('strong','',currency(Core.summary(answers,state.quotation.items).total)));body.append(totals);
       const feedback=el('div'),actions=el('div','dialog-actions'),back=button('Voltar','secondary',closeReview),send=button('Enviar proposta','primary',()=>submit(feedback,back,send));actions.append(back,send);dialog.append(title,body,feedback,actions);document.body.append(dialog);dialog.showModal();title.focus({preventScroll:true});
     }
     async function submit(feedback,back,send){
