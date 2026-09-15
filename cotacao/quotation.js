@@ -2,7 +2,7 @@
   'use strict';
   const Core=global.AloQuotationCore;
   const ENDPOINT='https://sxbcjzshcjxzladwptiu.supabase.co/functions/v1/alo-cozinha-sync?publicquotation=1';
-  const currency=value=>Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+  const currency=(value,precision=2)=>Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:precision});
   const number=value=>Number(value).toLocaleString('pt-BR',{maximumFractionDigits:6});
   const date=value=>{const parsed=new Date(value);return Number.isFinite(parsed.getTime())?parsed.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}):'Prazo não informado';};
   const el=(tag,className,text)=>{const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=String(text);return node;};
@@ -80,7 +80,7 @@
         else{
           const unit=item.units.find(unit=>unit.id===answer.unitId);
           row.append(el('p','',`${number(answer.quantity)} × ${unit?.label||'Unidade'}${answer.brand?' · '+answer.brand:''}`));
-          row.append(el('p','answer-price',`${currency(answer.unitPrice)} por ${unit?.label||'unidade'} · Total ${currency(answer.quantity*answer.unitPrice)}`));
+          row.append(el('p','answer-price',`${currency(answer.unitPrice,4)} por ${unit?.label||'unidade'} · Total ${currency(answer.quantity*answer.unitPrice)}`));
         }
         list.append(row);
       }
