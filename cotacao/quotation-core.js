@@ -17,6 +17,7 @@
     return Number(input);
   }
   function inputNumber(value){return Number.isFinite(Number(value))?String(value).replace('.',','):'';}
+  function quantityFromTyping(value){const parts=String(value??'').replace(/[^\d,.]/g,'').replace(/\./g,',').split(',');return parts[0].slice(0,10)+(parts.length>1?','+parts.slice(1).join('').slice(0,6):'');}
   function formatPrice(value){return Number.isFinite(Number(value))?Number(value).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:4}):'';}
   function priceFromTyping(value){
     const digits=String(value??'').replace(/\D/g,'');
@@ -98,6 +99,6 @@
     return {count:available.length,total:available.reduce((sum,answer)=>sum+offerTotal(items.find(item=>item.id===answer.itemId)||{units:[]},answer),0),unavailable:answers.filter(answer=>answer.unavailable).length};
   }
   function signature(revision,answers){return JSON.stringify({expectedRevision:revision,answers});}
-  const api={tokenFromFragment,decimal,inputNumber,formatPrice,priceFromTyping,priceFromPaste,customMeasures,offerUnit,offerUnitLabel,priceUnitLabel,offerTotal,quotationFromResponse,draftForQuotation,buildAnswers,summary,signature};
+  const api={tokenFromFragment,decimal,inputNumber,quantityFromTyping,formatPrice,priceFromTyping,priceFromPaste,customMeasures,offerUnit,offerUnitLabel,priceUnitLabel,offerTotal,quotationFromResponse,draftForQuotation,buildAnswers,summary,signature};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.AloQuotationCore=api;
 })(typeof window==='object'?window:globalThis);
