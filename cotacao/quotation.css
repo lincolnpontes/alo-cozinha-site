@@ -137,3 +137,6 @@ h1{font-size:24px;line-height:1.25;margin:5px 0 14px;overflow-wrap:anywhere}
 .money-input{min-width:0;gap:4px}.money-input>span{flex:none;white-space:nowrap}.money-input input{min-width:0;width:100%;padding-left:3px}
 .money-input input:focus-visible{outline:none}.money-input:focus-within{outline:3px solid #8ab8ed;outline-offset:2px}
 @media(max-width:350px){.restaurant-brand{flex-basis:95px}.brand-inner .restaurant-logo{max-width:95px;max-height:62px}}
+.auction-panel{padding:12px;margin:12px 0;border:1px solid #d5c9e7;border-radius:8px;background:#f7f3fb;text-align:left;color:#50316b}
+.auction-panel>strong{font-size:15px}.auction-panel>p{font-size:13px;line-height:1.45;margin:6px 0}.auction-panel .button{min-height:44px;margin-top:4px;padding:8px 12px;font-size:13px}
+.auction-panel .auction-status{font-size:12px;color:#696078;min-height:18px}.auction-item-price{font-size:13px!important;color:#543475!important;font-weight:700;background:#f4eef9;padding:8px;border-radius:6px;margin:8px 0 0!important}

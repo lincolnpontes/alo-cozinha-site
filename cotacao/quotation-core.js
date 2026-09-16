@@ -99,6 +99,7 @@
     return {count:available.length,total:available.reduce((sum,answer)=>sum+offerTotal(items.find(item=>item.id===answer.itemId)||{units:[]},answer),0),unavailable:answers.filter(answer=>answer.unavailable).length};
   }
   function signature(revision,answers){return JSON.stringify({expectedRevision:revision,answers});}
-  const api={tokenFromFragment,decimal,inputNumber,quantityFromTyping,formatPrice,priceFromTyping,priceFromPaste,customMeasures,offerUnit,offerUnitLabel,priceUnitLabel,offerTotal,quotationFromResponse,draftForQuotation,buildAnswers,summary,signature};
+  function auctionMinimum(q,itemId){if(!q?.auctionEnabled||q.status!=="answered")return null;return (q.auctionMinima||[]).find(entry=>entry.itemId===itemId&&typeof entry.unitPrice==="number"&&Number.isFinite(entry.unitPrice)&&entry.unitPrice>0&&["kg","L","un"].includes(entry.unit))||null;}
+  const api={auctionMinimum,tokenFromFragment,decimal,inputNumber,quantityFromTyping,formatPrice,priceFromTyping,priceFromPaste,customMeasures,offerUnit,offerUnitLabel,priceUnitLabel,offerTotal,quotationFromResponse,draftForQuotation,buildAnswers,summary,signature};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.AloQuotationCore=api;
 })(typeof window==='object'?window:globalThis);

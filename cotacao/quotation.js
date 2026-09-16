@@ -1,6 +1,7 @@
 (function(global){
   'use strict';
   const Core=global.AloQuotationCore;
+  const instances=new WeakMap();
   const ENDPOINT='https://sxbcjzshcjxzladwptiu.supabase.co/functions/v1/alo-cozinha-sync?publicquotation=1';
   const currency=(value,precision=2)=>Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:precision});
   const number=value=>Number(value).toLocaleString('pt-BR',{maximumFractionDigits:6});
@@ -37,8 +38,43 @@
   }
   async function start(options={}){
     const root=options.root||document.getElementById('quotationApp'),token=options.token||'';
+    instances.get(root)?.();
     const transport=options.transport||((action,payload)=>request(token,action,payload));
     const state={quotation:null,values:null,pending:null,busy:false,loading:false,dirty:false,key:'',storage:null,localSaved:false,fields:new Map(),dialog:null,unitChoice:null};
+    let auctionTimer=null,auctionBusy=false,disposed=false,auctionClosed=false;
+    const stopAuction=()=>{clearTimeout(auctionTimer);auctionTimer=null;};
+    function auctionOpen(){return !disposed&&!auctionClosed&&state.quotation?.auctionEnabled&&state.quotation.status==='answered'&&Date.parse(state.quotation.expiresAt)>Date.now();}
+    function scheduleAuction(){stopAuction();if(auctionOpen()&&!document.hidden)auctionTimer=setTimeout(()=>refreshAuction(),60000);}
+    function auctionText(itemId){const minimum=Core.auctionMinimum(state.quotation,itemId);return minimum?`Menor preço nesta rodada: ${currency(minimum.unitPrice,4)} / ${minimum.unit}`:'Ainda sem preço comparável para este item.';}
+    function auctionPrice(itemId){const node=el('p','auction-item-price',auctionText(itemId));node.dataset.auctionItem=itemId;return node;}
+    async function refreshAuction(){
+      if(auctionBusy||disposed||state.busy||state.loading){scheduleAuction();return;}
+      if(!auctionOpen()){stopAuction();return;}
+      auctionBusy=true;const status=root.querySelector('[data-auction-status]');if(status)status.textContent='Atualizando preços…';
+      root.querySelectorAll('[data-auction-refresh]').forEach(button=>button.disabled=true);
+      try{
+        const result=await transport('quotation_auction');if(disposed)return;
+        if(result.status!=='ok'||!Array.isArray(result.auctionMinima))throw apiError('invalid_response');
+        state.quotation.auctionMinima=result.auctionMinima;
+        auctionClosed=result.statusCotacao==='ordered'||Date.parse(result.expiresAt)<=Date.now();
+        root.querySelectorAll('[data-auction-item]').forEach(node=>node.textContent=auctionText(node.dataset.auctionItem));
+        if(status)status.textContent=auctionClosed?'Cotação encerrada.':`Preços atualizados às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}.`;
+      }catch(error){if(disposed)return;if(error.code==='quotation_unavailable'){auctionClosed=true;if(status)status.textContent='O prazo terminou ou o restaurante encerrou o link.';}else if(status)status.textContent='Não foi possível atualizar. Tente novamente; sua edição foi preservada.';}
+      finally{auctionBusy=false;root.querySelectorAll('[data-auction-refresh]').forEach(button=>button.disabled=auctionClosed);scheduleAuction();}
+    }
+    function auctionPanel(){
+      const q=state.quotation;if(!q.auctionEnabled||q.status==='ordered'){stopAuction();return null;}
+      const panel=el('section','auction-panel');panel.append(el('strong','','Leilão ativado'));
+      panel.append(el('p','',q.status==='answered'?'Compare por kg, L ou unidade e revise sua proposta até o prazo. Os valores podem ser de marcas diferentes; o restaurante escolhe o pedido.':'Envie sua proposta para consultar o menor preço dos itens disponíveis que você ofertar. Você poderá revisar os valores até o prazo.'));
+      if(q.status==='answered'){
+        const status=el('p','auction-status',auctionClosed?'Cotação encerrada.':'Atualização automática a cada minuto nesta página.');status.dataset.auctionStatus='';status.setAttribute('role','status');
+        const refresh=button('Atualizar preços','secondary',refreshAuction);refresh.dataset.auctionRefresh='';refresh.disabled=auctionClosed;panel.append(status,refresh);
+      }
+      scheduleAuction();return panel;
+    }
+    const visibility=()=>{if(document.hidden)stopAuction();else if(auctionOpen())refreshAuction();};
+    document.addEventListener('visibilitychange',visibility);
+    instances.set(root,()=>{disposed=true;stopAuction();document.removeEventListener('visibilitychange',visibility);});
     let progress,totalAmount,summaryCount,formNotice;
     try{state.storage=options.storage===false?null:options.storage||global.localStorage;state.key=await draftKey(token);}catch(error){state.storage=null;}
     function saveDraft(){
@@ -55,6 +91,7 @@
     function clearDraft(){try{state.storage?.removeItem(state.key);}catch(error){}state.dirty=false;state.pending=null;state.localSaved=false;}
     function closeReview(){if(state.busy)return;state.dialog?.close();}
     function fatal(code,retry=true){
+      stopAuction();auctionClosed=true;
       state.dialog?.close();root.setAttribute('aria-busy','false');
       const panel=el('section','state-panel'),mark=el('div','state-mark');mark.append(icon('alert'));
       const heading=el('h1','',code==='missing_token'?'Abra o link da cotação':'Cotação indisponível');heading.tabIndex=-1;
@@ -80,6 +117,7 @@
           const label=Core.offerUnitLabel(item,answer);
           row.append(el('p','',`${number(answer.quantity)} × ${label}${answer.brand?' · '+answer.brand:''}`));
           row.append(el('p','answer-price',`${currency(answer.unitPrice,4)} por ${Core.priceUnitLabel(item,answer)} · Total ${currency(Core.offerTotal(item,answer))}`));
+          if(quotation.auctionEnabled&&quotation.status==='answered')row.append(auctionPrice(item.id));
         }
         list.append(row);
       }
@@ -91,6 +129,7 @@
       panel.append(mark,heading,el('p','',closed?'O restaurante encerrou esta cotação. Não é mais possível enviar ou alterar a proposta.':`${q.restaurantName||'O restaurante'} recebeu sua proposta.`));
       if(q.submittedAt)panel.append(el('p','',`Enviada em ${date(q.submittedAt)}`));
       if(!closed)panel.append(el('p','','Você pode atualizar os valores até o prazo da cotação.'));
+      const auction=auctionPanel();if(auction)panel.append(auction);
       if((q.answers||[]).length){panel.append(el('h2','submitted-heading','Sua resposta'),answerList(q,q.answers));const totals=Core.summary(q.answers,q.items),line=el('div','review-total','Total ofertado');line.append(el('strong','',currency(totals.total)));panel.append(line);}
       if(!closed)panel.append(button('Editar proposta','secondary',()=>{state.values=Core.draftForQuotation(q);state.pending=null;renderForm();}));
       root.replaceChildren(header(q),panel);panel.classList.add('receipt-panel');root.setAttribute('aria-busy','false');heading.focus({preventScroll:true});
@@ -177,7 +216,7 @@
       title.id='packagingTitle';dialog.setAttribute('aria-labelledby',title.id);error.hidden=true;error.setAttribute('role','alert');
       let nameInput;if(kind==='Outra'){const wrap=el('div','field'),nameLabel=el('label','','Nome da embalagem');nameInput=el('input');nameInput.id='packagingName';nameLabel.htmlFor=nameInput.id;nameInput.maxLength=120;nameInput.value=label;wrap.append(nameLabel,nameInput);body.append(wrap);}
       const row=el('div','custom-content-row'),amountWrap=el('div','field'),amountLabel=el('label','','Qtde'),amount=el('input'),measureWrap=el('div','field'),measureLabel=el('label','','Subunidade');
-      amount.id='packagingAmount';amount.type='text';amount.inputMode='decimal';amount.autocomplete='off';amount.maxLength=17;amountLabel.htmlFor=amount.id;amount.value=editing?Core.inputNumber(old.amount):'';amount.placeholder='Ex.: 15';amount.addEventListener('input',()=>{amount.value=Core.quantityFromTyping(amount.value);});
+      amount.id='packagingAmount';amount.type='text';amount.inputMode='decimal';amount.autocomplete='off';amount.maxLength=17;amountLabel.htmlFor=amount.id;amount.value=editing?Core.inputNumber(old.amount):'';amount.placeholder='Ex.: 15';amount.addEventListener('focus',()=>amount.select());amount.addEventListener('click',()=>amount.select());amount.addEventListener('input',()=>{amount.value=Core.quantityFromTyping(amount.value);});
       let measure=allowed.some(m=>m.id===old.measure)?old.measure:allowed[0]?.id;const choice=choiceMenu(item,index,'packMeasure','Subunidade',allowed,measure,id=>{measure=id;});choice.trigger.id='packagingMeasure';measureLabel.htmlFor=choice.trigger.id;
       amountWrap.append(amountLabel,amount);measureWrap.append(measureLabel,choice.container);row.append(amountWrap,measureWrap);body.append(row,error);
       const cancel=button('Cancelar','secondary',()=>dialog.close()),save=button('Salvar','primary',()=>{
@@ -260,6 +299,7 @@
       let priceKey='';function refreshPriceUnit(){const value=state.values[item.id],resolved=Core.offerUnit(item,value),canBase=resolved?.factor>0&&['kg','L','un'].includes(resolved.base),label=Core.offerUnitLabel(item,value),key=JSON.stringify([label,canBase,resolved?.base,value.priceBasis]);if(key===priceKey)return;priceKey=key;priceHeading.replaceChildren(unitPrice.label);const options=[{id:'package',label}];if(canBase&&!(resolved.factor===1&&label===resolved.base))options.push({id:'base',label:resolved.base});if(options.length===1){unitPrice.label.textContent='Preço por '+(value.priceBasis==='base'?resolved.base:label);}else{unitPrice.label.textContent='Preço por';const choice=choiceMenu(item,index,'priceBasis','Unidade do preço',options,value.priceBasis||'package',id=>{if(id!==value.priceBasis)changed(item.id,'priceBasis',id);});priceHeading.append(choice.container);}}
       const itemTotal=el('div','item-total'),total=el('strong','','—'),priceRow=el('div','price-total-row');itemTotal.append(el('span','','Total'),total);priceRow.append(unitPrice.wrap,itemTotal);fields.append(priceRow);
       fields.hidden=state.values[item.id].unavailable;card.append(fields);
+      if(state.quotation.auctionEnabled&&state.quotation.status==='answered')card.append(auctionPrice(item.id));
       state.fields.set(item.id,{brand,quantity,unitId,unitPrice,fields,availability,total,priceLabel:unitPrice.label,refreshPriceUnit,refreshPackaging,customLabel:customRef,customAmount:customRef,customMeasure:customRef});return card;
     }
     function renderForm(message=''){
@@ -267,6 +307,7 @@
       state.fields.clear();const form=el('form');form.noValidate=true;form.addEventListener('submit',event=>{event.preventDefault();review();});
       const heading=el('div','section-heading');progress=el('span','progress');progress.setAttribute('role','status');heading.append(el('h2','','Proposta'),progress);form.append(heading);
       formNotice=el('div');if(message)formNotice.append(notice(message,'warning'));form.append(formNotice);
+      const auction=auctionPanel();if(auction)form.append(auction);
       const list=el('div','item-list');state.quotation.items.forEach((item,index)=>list.append(itemCard(item,index)));form.append(list);
       const actions=el('div','proposal-actions'),summary=el('div','proposal-summary');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));actions.append(summary,submit);form.append(actions);
       root.replaceChildren(header(state.quotation),form);root.setAttribute('aria-busy','false');updateTotals();
@@ -306,6 +347,7 @@
       root.setAttribute('aria-busy','true');if(!preserve)root.replaceChildren(el('div','state-panel','Carregando cotação…'));
       try{
         state.quotation=Core.quotationFromResponse(await transport('quotation_view'));
+        auctionClosed=false;
         const keepMemory=preserve&&Boolean(state.values),saved=keepMemory?null:savedDraft(),previous=keepMemory?state.values:saved?.values;
         state.values=Core.draftForQuotation(state.quotation,previous);state.pending=keepMemory?state.pending:saved?.pending||null;state.dirty=keepMemory?state.dirty:Boolean(saved?.dirty);state.localSaved=Boolean(saved)||keepMemory&&state.localSaved;
         const currentAnswers=Core.buildAnswers(state.quotation,Core.draftForQuotation(state.quotation)).answers;
