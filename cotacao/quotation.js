@@ -66,7 +66,7 @@
       const panel=el('section','request-summary');
       const supplier=el('div','request-line');supplier.append(el('span','eyebrow','Fornecedor'),el('h1','',quotation.supplierName||'Sua cotação'));
       const recipient=el('div','request-line'),identity=el('div','request-identity');identity.append(el('strong','',quotation.legalName||quotation.restaurantName||'Restaurante'));if(quotation.cnpj)identity.append(el('small','', 'CNPJ: '+String(quotation.cnpj).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5')));recipient.append(el('span','eyebrow','Solicitante'),identity);
-      const brand=document.querySelector('.brand-inner');if(brand){brand.replaceChildren();if(/^data:image\/(png|jpeg|webp);base64,/i.test(quotation.logoDataUrl||'')){const logo=el('img','restaurant-logo');logo.src=quotation.logoDataUrl;logo.alt=quotation.restaurantName||'Restaurante';brand.append(logo);}else brand.append(el('strong','restaurant-name',quotation.restaurantName||'Alô Cozinha'));}
+      const brand=document.querySelector('.brand-inner');if(brand){if(!brand.dataset.appBrand){brand.dataset.appBrand='true';const app=el('div','app-brand');while(brand.firstChild)app.append(brand.firstChild);brand.append(app);}brand.querySelector('.restaurant-brand')?.remove();const restaurant=el('div','restaurant-brand');if(/^data:image\/(png|jpeg|webp);base64,/i.test(quotation.logoDataUrl||'')){const logo=el('img','restaurant-logo');logo.src=quotation.logoDataUrl;logo.alt=quotation.restaurantName||'Restaurante';restaurant.append(logo);}else restaurant.append(el('span','restaurant-name',quotation.restaurantName||''));brand.append(restaurant);}
       const deadline=el('p','deadline');deadline.append(icon('clock'),el('span','',`Responder até ${date(quotation.expiresAt)}`));panel.append(supplier,recipient,deadline);
       return panel;
     }
@@ -118,7 +118,7 @@
     }
     function closeUnitChoice(focus=false){
       const choice=state.unitChoice;if(!choice)return;
-      choice.menu.hidden=true;choice.trigger.setAttribute('aria-expanded','false');state.unitChoice=null;
+      choice.menu.hidden=true;choice.trigger.setAttribute('aria-expanded','false');choice.cleanup?.();state.unitChoice=null;
       if(focus)choice.trigger.focus();
     }
     function choiceMenu(item,index,key,label,options,selected,onPick){
@@ -144,22 +144,36 @@
         });
         menu.append(option);
       }
-      function open(){closeUnitChoice();menu.hidden=false;const rect=trigger.getBoundingClientRect(),below=window.innerHeight-rect.bottom-12,above=rect.top-12,useAbove=below<220&&above>below;menu.style.top=useAbove?'auto':'calc(100% + 5px)';menu.style.bottom=useAbove?'calc(100% + 5px)':'auto';menu.style.maxHeight=Math.max(100,Math.min(430,useAbove?above:below))+'px';trigger.setAttribute('aria-expanded','true');state.unitChoice=choice;(menu.querySelector('[aria-selected="true"]')||menu.firstElementChild)?.focus({preventScroll:true});}
+      function open(){
+        closeUnitChoice();menu.hidden=false;trigger.setAttribute('aria-expanded','true');state.unitChoice=choice;
+        function position(){
+          const v=window.visualViewport,top=v?.offsetTop||0,left=v?.offsetLeft||0,height=v?.height||innerHeight,width=v?.width||innerWidth,rect=trigger.getBoundingClientRect(),pad=10;
+          if(rect.bottom<top||rect.top>top+height){closeUnitChoice();return;}
+          const below=Math.max(0,top+height-rect.bottom-pad),above=Math.max(0,rect.top-top-pad),up=below<220&&above>below,space=Math.min(430,Math.max(above,below));
+          const w=Math.min(Math.max(rect.width,220),width-pad*2);menu.style.position='fixed';menu.style.width=w+'px';menu.style.maxHeight=Math.min(430,up?above:below,Math.max(44,height-pad*2))+'px';menu.style.left=Math.max(left+pad,Math.min(rect.left,left+width-w-pad))+'px';menu.style.right='auto';menu.style.bottom='auto';
+          const h=Math.min(menu.scrollHeight,parseFloat(menu.style.maxHeight));menu.style.top=Math.max(top+pad,Math.min(up?rect.top-h-5:rect.bottom+5,top+height-h-pad))+'px';
+        }
+        const outside=e=>{if(!container.contains(e.target))closeUnitChoice();};const scrolled=e=>{if(!menu.contains(e.target))position();};
+        choice.cleanup=()=>{window.removeEventListener('resize',position);document.removeEventListener('scroll',scrolled,true);document.removeEventListener('pointerdown',outside,true);window.visualViewport?.removeEventListener('resize',position);window.visualViewport?.removeEventListener('scroll',position);};
+        window.addEventListener('resize',position);document.addEventListener('scroll',scrolled,true);document.addEventListener('pointerdown',outside,true);window.visualViewport?.addEventListener('resize',position);window.visualViewport?.addEventListener('scroll',position);
+        position();(menu.querySelector('[aria-selected="true"]')||menu.firstElementChild)?.focus({preventScroll:true});
+      }
       trigger.addEventListener('click',()=>menu.hidden?open():closeUnitChoice());
       trigger.addEventListener('keydown',event=>{if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();open();}else if(event.key==='Escape')closeUnitChoice();});
       container.addEventListener('focusout',event=>{if(state.unitChoice===choice&&!container.contains(event.relatedTarget))closeUnitChoice();});
       container.append(trigger,menu);return choice;
     }
     function unitChoice(item,index){
-      const options=[...item.units];if(Core.customMeasures(item).length)options.push(...['Caixa','Unidade','Fardo'].map(label=>({id:'pack:'+label,label})),{id:'pack:Outra',label:'Outra embalagem'});
-      const choice=choiceMenu(item,index,'unit','Unidade',options,state.values[item.id].unitId,id=>{
+      const value=state.values[item.id],options=[...item.units];if(value.unitId==='__custom__')options.unshift({id:'edit:custom',label:`${value.customUnit.label} com ${number(Core.decimal(value.customUnit.amount))} ${value.customUnit.measure} · Editar`});if(Core.customMeasures(item).length)options.push(...['Caixa','Unidade','Fardo'].map(label=>({id:'pack:'+label,label})),{id:'pack:Outra',label:'Outra embalagem'});
+      const choice=choiceMenu(item,index,'unit','Unidade',options,value.unitId==='__custom__'?'edit:custom':value.unitId,id=>{
+        if(id==='edit:custom'){const name=value.customUnit.label;editPackaging(item,index,['Caixa','Unidade','Fardo'].includes(name)?name:'Outra');return false;}
         if(id.startsWith('pack:')){editPackaging(item,index,id.slice(5));return false;}
         if(state.values[item.id].unitId!==id)changed(item.id,'unitId',id);
       });return choice;
     }
     function editPackaging(item,index,kind){
       closeUnitChoice();const value=state.values[item.id],old=value.customUnit||{},editing=value.unitId==='__custom__',allowed=Core.customMeasures(item);
-      const label=kind==='Outra'?(editing?old.label:''):kind,dialog=el('dialog','review-dialog packaging-dialog'),title=el('h2','',kind==='Outra'?'Outra embalagem':kind),body=el('div','packaging-body'),actions=el('div','review-actions'),error=el('p','field-error');
+      const label=kind==='Outra'?(editing?old.label:''):kind,dialog=el('dialog','review-dialog packaging-dialog'),title=el('h2','',kind==='Outra'?'Qual a composição da embalagem?':`Qual a composição ${kind==='Fardo'?'do fardo':kind==='Caixa'?'da caixa':'da unidade'}?`),body=el('div','packaging-body'),actions=el('div','review-actions'),error=el('p','field-error');
       title.id='packagingTitle';dialog.setAttribute('aria-labelledby',title.id);error.hidden=true;error.setAttribute('role','alert');
       let nameInput;if(kind==='Outra'){const wrap=el('div','field'),nameLabel=el('label','','Nome da embalagem');nameInput=el('input');nameInput.id='packagingName';nameLabel.htmlFor=nameInput.id;nameInput.maxLength=120;nameInput.value=label;wrap.append(nameLabel,nameInput);body.append(wrap);}
       const row=el('div','custom-content-row'),amountWrap=el('div','field'),amountLabel=el('label','','Qtde'),amount=el('input'),measureWrap=el('div','field'),measureLabel=el('label','','Subunidade');
@@ -173,7 +187,7 @@
         const switched=value.unitId!=='__custom__',oldMeasure=old.measure;value.customUnit={label:name,amount:String(count),measure};
         if(switched){value.priceBasis='base';changed(item.id,'unitId','__custom__');}
         else{if(oldMeasure!==measure){value.unitPrice='';state.fields.get(item.id).unitPrice.input.value='';}changed(item.id,'customAmount',String(count));}
-        dialog.close();
+        dialog.close();renderForm();
       });
       amount.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save.click();}});actions.append(save,cancel);dialog.append(title,body,actions);document.body.append(dialog);
       dialog.addEventListener('close',()=>{closeUnitChoice();dialog.remove();state.fields.get(item.id)?.unitId.input.focus({preventScroll:true});});dialog.showModal();(nameInput||amount).focus({preventScroll:true});
@@ -235,11 +249,10 @@
       const requestedUnit=item.units.find(unit=>unit.id===item.unitId),requested=el('p','requested',`${number(item.quantity)} × ${requestedUnit.label}`);head.append(name,requested);card.append(head);
       const fields=el('div','offer-fields'),brand=brandField(item,index),quantity=field(item,index,'quantity','Qtde'),unitId=field(item,index,'unitId','Unidade','select'),unitPrice=field(item,index,'unitPrice','Preço por unidade'),row=el('div','offer-row');
       const brandRow=el('div','brand-row');brandRow.append(brand.wrap,availability);brand.wrap.hidden=state.values[item.id].unavailable;card.append(brandRow);
-      const subWrap=el('div','field subunit-field'),subLabel=el('label','','Subunidade'),subButton=button('Definir','unit-choice-trigger',()=>{const name=state.values[item.id].customUnit.label;editPackaging(item,index,['Caixa','Unidade','Fardo'].includes(name)?name:'Outra');}),subError=el('p','field-error');subButton.id='subunit-'+index;subLabel.htmlFor=subButton.id;subError.hidden=true;subWrap.append(subLabel,subButton,subError);
-      quantity.wrap.classList.add('quantity-field');row.append(quantity.wrap,unitId.wrap,subWrap);fields.append(row);
-      function refreshPackaging(){const value=state.values[item.id],custom=value.unitId==='__custom__';subWrap.hidden=!custom;row.classList.toggle('with-subunit',custom);if(custom){unitId.choice.copy.textContent=value.customUnit.label||'Embalagem';unitId.input.value='__custom__';subButton.textContent=number(Core.decimal(value.customUnit.amount))+' '+value.customUnit.measure;}else{unitId.choice.copy.textContent=item.units.find(u=>u.id===value.unitId)?.label||'Escolher';} }
-      const customRef={wrap:subWrap,input:subButton,error:subError};
-      const priceHeading=el('div','price-unit-heading');unitPrice.label.textContent='Preço por';unitPrice.label.replaceWith(priceHeading);priceHeading.append(unitPrice.label);
+      quantity.wrap.classList.add('quantity-field');row.append(quantity.wrap,unitId.wrap);fields.append(row);
+      function refreshPackaging(){const value=state.values[item.id],custom=value.unitId==='__custom__';if(custom){unitId.choice.copy.textContent=`${value.customUnit.label||'Embalagem'} com ${number(Core.decimal(value.customUnit.amount))} ${value.customUnit.measure}`;unitId.input.value='__custom__';}else unitId.choice.copy.textContent=item.units.find(u=>u.id===value.unitId)?.label||'Escolher';}
+      const customRef=unitId;
+      const priceHeading=el('div','price-unit-heading');unitPrice.label.textContent='Preço por';unitPrice.label.replaceWith(priceHeading);priceHeading.append(unitPrice.label);unitPrice.wrap.classList.add('inline-price-field');
       let priceKey='';function refreshPriceUnit(){const value=state.values[item.id],resolved=Core.offerUnit(item,value),canBase=resolved?.factor>0&&['kg','L','un'].includes(resolved.base),label=Core.offerUnitLabel(item,value),key=JSON.stringify([label,canBase,resolved?.base,value.priceBasis]);if(key===priceKey)return;priceKey=key;priceHeading.replaceChildren(unitPrice.label);const options=[{id:'package',label}];if(canBase&&!(resolved.factor===1&&label===resolved.base))options.push({id:'base',label:resolved.base});if(options.length===1){unitPrice.label.textContent='Preço por '+(value.priceBasis==='base'?resolved.base:label);}else{unitPrice.label.textContent='Preço por';const choice=choiceMenu(item,index,'priceBasis','Unidade do preço',options,value.priceBasis||'package',id=>{if(id!==value.priceBasis)changed(item.id,'priceBasis',id);});priceHeading.append(choice.container);}}
       const itemTotal=el('div','item-total'),total=el('strong','','—'),priceRow=el('div','price-total-row');itemTotal.append(el('span','','Total'),total);priceRow.append(unitPrice.wrap,itemTotal);fields.append(priceRow);
       fields.hidden=state.values[item.id].unavailable;card.append(fields);
