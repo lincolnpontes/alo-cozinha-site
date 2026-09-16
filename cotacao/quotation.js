@@ -64,7 +64,7 @@
     }
     function auctionPanel(){
       const q=state.quotation;if(!q.auctionEnabled||q.status==='ordered'){stopAuction();return null;}
-      const panel=el('section','auction-panel');panel.append(el('strong','','Leilão ativado'));
+      const panel=el('section','auction-panel');panel.append(el('strong','','Leilão reverso'));
       panel.append(el('p','',q.status==='answered'?'Compare por kg, L ou unidade e revise sua proposta até o prazo. Os valores podem ser de marcas diferentes; o restaurante escolhe o pedido.':'Envie sua proposta para consultar o menor preço dos itens disponíveis que você ofertar. Você poderá revisar os valores até o prazo.'));
       if(q.status==='answered'){
         const status=el('p','auction-status',auctionClosed?'Cotação encerrada.':'Atualização automática a cada minuto nesta página.');status.dataset.auctionStatus='';status.setAttribute('role','status');
