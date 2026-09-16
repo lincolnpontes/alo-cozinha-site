@@ -140,3 +140,11 @@ h1{font-size:24px;line-height:1.25;margin:5px 0 14px;overflow-wrap:anywhere}
 .auction-panel{padding:12px;margin:12px 0;border:1px solid #d5c9e7;border-radius:8px;background:#f7f3fb;text-align:left;color:#50316b}
 .auction-panel>strong{font-size:15px}.auction-panel>p{font-size:13px;line-height:1.45;margin:6px 0}.auction-panel .button{min-height:44px;margin-top:4px;padding:8px 12px;font-size:13px}
 .auction-panel .auction-status{font-size:12px;color:#696078;min-height:18px}.auction-item-price{font-size:13px!important;color:#543475!important;font-weight:700;background:#f4eef9;padding:8px;border-radius:6px;margin:8px 0 0!important}
+.supplier-guidance{font-size:13px;line-height:1.45;color:#526573;margin:12px 0 14px;padding:10px 12px;background:#edf4f9;border-left:3px solid #4e7b9a;border-radius:5px}
+.price-observation-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);align-items:end;gap:10px}
+.price-observation-row .inline-price-field{display:flex;flex-direction:column;align-items:stretch;gap:0}
+.price-observation-row .price-unit-heading{min-height:22px;margin-bottom:5px;flex-wrap:wrap;align-items:center}
+.price-observation-row .price-unit-heading .unit-choice{flex:1;min-width:0}
+.price-observation-row .money-input{min-height:46px;box-sizing:border-box}
+.observation-field{min-width:0}.observation-field input{min-width:0;width:100%;box-sizing:border-box}
+.answer-observation{white-space:pre-wrap}

@@ -65,7 +65,7 @@
     function auctionPanel(){
       const q=state.quotation;if(!q.auctionEnabled||q.status==='ordered'){stopAuction();return null;}
       const panel=el('section','auction-panel');panel.append(el('strong','','Leilão reverso'));
-      panel.append(el('p','',q.status==='answered'?'Compare por kg, L ou unidade e revise sua proposta até o prazo. Os valores podem ser de marcas diferentes; o restaurante escolhe o pedido.':'Envie sua proposta para consultar o menor preço dos itens disponíveis que você ofertar. Você poderá revisar os valores até o prazo.'));
+      if(q.status!=='answered')panel.append(el('p','','Envie sua proposta para consultar o menor preço dos itens disponíveis que você ofertar.'));
       if(q.status==='answered'){
         const status=el('p','auction-status',auctionClosed?'Cotação encerrada.':'Atualização automática a cada minuto nesta página.');status.dataset.auctionStatus='';status.setAttribute('role','status');
         const refresh=button('Atualizar preços','secondary',refreshAuction);refresh.dataset.auctionRefresh='';refresh.disabled=auctionClosed;panel.append(status,refresh);
@@ -117,6 +117,7 @@
           const label=Core.offerUnitLabel(item,answer);
           row.append(el('p','',`${number(answer.quantity)} × ${label}${answer.brand?' · '+answer.brand:''}`));
           row.append(el('p','answer-price',`${currency(answer.unitPrice,4)} por ${Core.priceUnitLabel(item,answer)} · Total ${currency(Core.offerTotal(item,answer))}`));
+          if(answer.observation)row.append(el('p','answer-observation',answer.observation));
           if(quotation.auctionEnabled&&quotation.status==='answered')row.append(auctionPrice(item.id));
         }
         list.append(row);
@@ -128,7 +129,6 @@
       const heading=el('h1','',closed?'Cotação encerrada':'Proposta enviada');heading.tabIndex=-1;
       panel.append(mark,heading,el('p','',closed?'O restaurante encerrou esta cotação. Não é mais possível enviar ou alterar a proposta.':`${q.restaurantName||'O restaurante'} recebeu sua proposta.`));
       if(q.submittedAt)panel.append(el('p','',`Enviada em ${date(q.submittedAt)}`));
-      if(!closed)panel.append(el('p','','Você pode atualizar os valores até o prazo da cotação.'));
       const auction=auctionPanel();if(auction)panel.append(auction);
       if((q.answers||[]).length){panel.append(el('h2','submitted-heading','Sua resposta'),answerList(q,q.answers));const totals=Core.summary(q.answers,q.items),line=el('div','review-total','Total ofertado');line.append(el('strong','',currency(totals.total)));panel.append(line);}
       if(!closed)panel.append(button('Editar proposta','secondary',()=>{state.values=Core.draftForQuotation(q);state.pending=null;renderForm();}));
@@ -238,7 +238,7 @@
     function field(item,index,key,label,type='text'){
       const wrap=el('div','field'),id=`offer-${index}-${key}`,labelNode=el('label','',label);labelNode.htmlFor=id;
       const choice=type==='select'?unitChoice(item,index):null,input=choice?choice.trigger:el('input');input.id=id;
-      if(type!=='select'){input.type='text';input.autocomplete='off';input.maxLength=['brand','customLabel'].includes(key)?120:24;if(!['brand','customLabel'].includes(key))input.inputMode='decimal';}
+      if(type!=='select'){input.type='text';input.autocomplete='off';input.maxLength=key==='observation'?500:['brand','customLabel'].includes(key)?120:24;if(!['brand','customLabel','observation'].includes(key))input.inputMode='decimal';}
       const customKey={customLabel:'label',customAmount:'amount'}[key];
       input.value=(customKey?state.values[item.id].customUnit[customKey]:state.values[item.id][key])??'';
       if(key==='unitPrice'){
@@ -297,10 +297,12 @@
       const customRef=unitId;
       const priceHeading=el('div','price-unit-heading');unitPrice.label.textContent='Preço por';unitPrice.label.replaceWith(priceHeading);priceHeading.append(unitPrice.label);unitPrice.wrap.classList.add('inline-price-field');
       let priceKey='';function refreshPriceUnit(){const value=state.values[item.id],resolved=Core.offerUnit(item,value),canBase=resolved?.factor>0&&['kg','L','un'].includes(resolved.base),label=Core.offerUnitLabel(item,value),key=JSON.stringify([label,canBase,resolved?.base,value.priceBasis]);if(key===priceKey)return;priceKey=key;priceHeading.replaceChildren(unitPrice.label);const options=[{id:'package',label}];if(canBase&&!(resolved.factor===1&&label===resolved.base))options.push({id:'base',label:resolved.base});if(options.length===1){unitPrice.label.textContent='Preço por '+(value.priceBasis==='base'?resolved.base:label);}else{unitPrice.label.textContent='Preço por';const choice=choiceMenu(item,index,'priceBasis','Unidade do preço',options,value.priceBasis||'package',id=>{if(id!==value.priceBasis)changed(item.id,'priceBasis',id);});priceHeading.append(choice.container);}}
-      const itemTotal=el('div','item-total'),total=el('strong','','—'),priceRow=el('div','price-total-row');itemTotal.append(el('span','','Total'),total);priceRow.append(unitPrice.wrap,itemTotal);fields.append(priceRow);
+      const observation=field(item,index,'observation','Observação'),priceObservation=el('div','price-observation-row');
+      observation.input.placeholder='Detalhes do item';observation.wrap.classList.add('observation-field');
+      const itemTotal=el('div','item-total'),total=el('strong','','—'),priceRow=el('div','price-total-row');itemTotal.append(el('span','','Total'),total);priceObservation.append(unitPrice.wrap,observation.wrap);priceRow.append(priceObservation,itemTotal);fields.append(priceRow);
       fields.hidden=state.values[item.id].unavailable;card.append(fields);
       if(state.quotation.auctionEnabled&&state.quotation.status==='answered')card.append(auctionPrice(item.id));
-      state.fields.set(item.id,{brand,quantity,unitId,unitPrice,fields,availability,total,priceLabel:unitPrice.label,refreshPriceUnit,refreshPackaging,customLabel:customRef,customAmount:customRef,customMeasure:customRef});return card;
+      state.fields.set(item.id,{brand,quantity,unitId,unitPrice,observation,fields,availability,total,priceLabel:unitPrice.label,refreshPriceUnit,refreshPackaging,customLabel:customRef,customAmount:customRef,customMeasure:customRef});return card;
     }
     function renderForm(message=''){
       closeUnitChoice();
@@ -308,6 +310,7 @@
       const heading=el('div','section-heading');progress=el('span','progress');progress.setAttribute('role','status');heading.append(el('h2','','Proposta'),progress);form.append(heading);
       formNotice=el('div');if(message)formNotice.append(notice(message,'warning'));form.append(formNotice);
       const auction=auctionPanel();if(auction)form.append(auction);
+      form.append(el('p','supplier-guidance','Qualquer dúvida em relação a itens (substituição de produto, marca diferente, tamanho da embalagem, etc.) fale com o responsável do estabelecimento.'));
       const list=el('div','item-list');state.quotation.items.forEach((item,index)=>list.append(itemCard(item,index)));form.append(list);
       const actions=el('div','proposal-actions'),summary=el('div','proposal-summary');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));actions.append(summary,submit);form.append(actions);
       root.replaceChildren(header(state.quotation),form);root.setAttribute('aria-busy','false');updateTotals();

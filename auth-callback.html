@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0b765f">
+    <meta name="referrer" content="no-referrer">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src https://sxbcjzshcjxzladwptiu.supabase.co; base-uri 'none'; form-action 'none'">
+    <title>Conta do Alô Cozinha</title>
+<script>
+(function () {
+    const SUPABASE_URL = 'https://sxbcjzshcjxzladwptiu.supabase.co';
+    const PUBLISHABLE_KEY = 'sb_publishable_U5ZEfqHRxIJc1abrIzV0cg_keNdZvuK';
+    // Keep this proof in this closure only; never create an app/browser session.
+    let query = new URLSearchParams(location.search);
+    let hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+    const value = key => hash.get(key) || query.get(key) || '';
+    let accessToken = value('access_token');
+    const type = value('type');
+    const authError = Boolean(value('error_description') || value('error') || value('error_code'));
+    query = null;
+    hash = null;
+    // Clear both fragments and query credentials before any images or requests load.
+    let urlCleared = false;
+    try { history.replaceState(null, '', location.pathname); urlCleared = true; } catch (_) {}
+
+    document.addEventListener('DOMContentLoaded', async function () {
+        const title = document.getElementById('title');
+        const description = document.getElementById('description');
+        const form = document.getElementById('passwordForm');
+        const message = document.getElementById('message');
+        const retry = document.getElementById('retry');
+        function feedback(text, error) {
+            message.textContent = text || '';
+            message.classList.toggle('error', Boolean(error));
+        }
+        function failure(text) {
+            title.textContent = 'Não foi possível validar o link';
+            description.textContent = text;
+            form.style.display = 'none';
+            feedback('Solicite um novo e-mail pelo Alô Cozinha se o link tiver expirado.', true);
+        }
+        async function authUser(method, body) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+            try {
+                const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+                    method, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer',
+                    redirect: 'error', signal: controller.signal,
+                    headers: { apikey: PUBLISHABLE_KEY, Authorization: `Bearer ${accessToken}`,
+                        ...(body ? { 'Content-Type': 'application/json' } : {}) },
+                    ...(body ? { body: JSON.stringify(body) } : {})
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const error = new Error(response.status === 401 || response.status === 403
+                        ? 'Este link expirou ou não é válido.' : 'Não foi possível concluir. Tente novamente.');
+                    error.invalid = response.status === 401 || response.status === 403;
+                    throw error;
+                }
+                if (!data || typeof data.id !== 'string' || !data.id) throw new Error('Não foi possível confirmar a conta.');
+                return data;
+            } finally { clearTimeout(timeout); }
+        }
+        if (!urlCleared || authError) {
+            accessToken = '';
+            failure('Solicite um novo link pelo aplicativo para continuar.');
+            return;
+        }
+        if (!accessToken) {
+            title.textContent = 'Link incompleto ou expirado';
+            description.textContent = 'Solicite um novo e-mail pelo Alô Cozinha para continuar.';
+            feedback('Nenhuma credencial foi armazenada nesta página.', true);
+            return;
+        }
+        let verifying = false;
+        let verifiedUser = null;
+        async function validate() {
+            if (verifying || !accessToken) return;
+            verifying = true;
+            retry.hidden = true;
+            title.textContent = 'Conferindo seu link';
+            description.textContent = 'Aguarde enquanto validamos sua conta.';
+            feedback('');
+            try {
+                verifiedUser = await authUser('GET');
+                if (type === 'recovery') {
+                    title.textContent = 'Crie uma nova senha';
+                    description.textContent = 'Use pelo menos 6 caracteres. A nova senha valerá em todos os seus aparelhos.';
+                    form.style.display = 'block';
+                } else {
+                    title.textContent = verifiedUser.email_confirmed_at ? 'E-mail confirmado' : 'Acesso validado';
+                    description.textContent = 'Volte ao aplicativo Alô Cozinha para entrar na sua conta.';
+                    feedback('Verificação concluída.');
+                    accessToken = '';
+                }
+            } catch (error) {
+                failure(error.name === 'AbortError' || error instanceof TypeError
+                    ? 'Não conseguimos conectar agora. Confira sua internet e tente novamente.' : error.message);
+                if (error.invalid) accessToken = '';
+                else retry.hidden = false;
+            } finally { verifying = false; }
+        }
+        retry.addEventListener('click', validate);
+        let saving = false;
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            if (saving || type !== 'recovery' || !accessToken || !verifiedUser) return;
+            const passwordField = document.getElementById('password');
+            const confirmField = document.getElementById('passwordConfirm');
+            const password = passwordField.value;
+            if (password.length < 6 || password.length > 4096) return feedback('Use uma senha entre 6 e 4096 caracteres.', true);
+            if (password !== confirmField.value) return feedback('As duas senhas não são iguais.', true);
+            const button = document.getElementById('submit');
+            saving = true;
+            button.disabled = true;
+            feedback('Salvando...');
+            try {
+                const user = await authUser('PUT', { password });
+                if (user.id !== verifiedUser.id) throw new Error('Não foi possível confirmar a alteração. Solicite um novo link.');
+                accessToken = '';
+                verifiedUser = null;
+                passwordField.value = '';
+                confirmField.value = '';
+                form.style.display = 'none';
+                title.textContent = 'Senha alterada';
+                description.textContent = 'Você já pode entrar no aplicativo Alô Cozinha com a nova senha.';
+                feedback('Alteração concluída.');
+            } catch (error) {
+                feedback(error.name === 'AbortError' || error instanceof TypeError
+                    ? 'Não foi possível confirmar agora. Confira sua internet e tente novamente.' : error.message, true);
+            } finally { saving = false; button.disabled = false; }
+        });
+        await validate();
+    }, { once: true });
+})();
+</script>
+
+    <style>
+        :root { color-scheme: light; font-family: Arial, sans-serif; }
+        * { box-sizing: border-box; }
+        body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; background: #eef5f2; color: #1d2926; }
+        main { width: min(100%, 420px); padding: 28px 24px; border: 1px solid #d2dfda; border-radius: 8px; background: #fff; box-shadow: 0 12px 30px rgba(22, 52, 44, .1); }
+        .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+        .brand img { width: 58px; height: 58px; object-fit: contain; }
+        .brand strong { display: block; color: #0b765f; font-size: 22px; }
+        .brand small { color: #64726e; }
+        h1 { margin: 0 0 8px; font-size: 23px; }
+        p { margin: 0 0 18px; color: #5a6965; line-height: 1.5; }
+        form { display: none; }
+        label { display: block; margin: 14px 0 6px; font-weight: 700; }
+        input { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid #b8c9c3; border-radius: 7px; font: inherit; }
+        button, a { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; font-weight: 800; text-decoration: none; }
+        button { width: 100%; margin-top: 18px; border: 0; background: #0b765f; color: #fff; cursor: pointer; }
+        button:disabled { opacity: .65; }
+        .back { width: 100%; margin-top: 12px; border: 1px solid #b8c9c3; color: #0b765f; }
+        .message { min-height: 22px; margin-top: 14px; color: #0b765f; font-weight: 700; }
+        .message.error { color: #b42318; }
+        [hidden] { display: none !important; }
+        :focus-visible { outline: 3px solid #d78535; outline-offset: 3px; }
+    </style>
+</head>
+<body>
+<main>
+    <div class="brand"><img src="icon.png" alt=""><span><strong>Alô Cozinha</strong><small>Conta e segurança</small></span></div>
+    <h1 id="title">Conferindo seu link</h1>
+    <p id="description">Aguarde enquanto validamos sua conta.</p>
+    <form id="passwordForm">
+        <label for="password">Nova senha</label>
+        <input id="password" type="password" autocomplete="new-password" minlength="6" maxlength="4096" required>
+        <label for="passwordConfirm">Repita a nova senha</label>
+        <input id="passwordConfirm" type="password" autocomplete="new-password" minlength="6" maxlength="4096" required>
+        <button id="submit" type="submit">Salvar nova senha</button>
+    </form>
+    <div id="message" class="message" role="status" aria-live="polite"></div>
+    <button id="retry" type="button" hidden>Tentar novamente</button>
+    <a class="back" href="./">Conhecer o Alô Cozinha</a>
+</main>
+
+</body>
+</html>

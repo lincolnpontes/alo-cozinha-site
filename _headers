@@ -7,3 +7,7 @@
 /cotacao/*
   X-Robots-Tag: noindex, nofollow, noarchive
   Cache-Control: no-cache
+
+/auth-callback*
+  X-Robots-Tag: noindex, nofollow, noarchive
+  Cache-Control: no-store

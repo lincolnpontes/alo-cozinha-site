@@ -63,7 +63,7 @@
     for(const item of quotation.items){
       const answer=(previous&&Object.hasOwn(previous,item.id)?previous[item.id]:null)||(quotation.answers||[]).find(value=>value.itemId===item.id);
       const allowed=customMeasures(item),customValid=answer?.unitId==='__custom__'&&allowed.some(measure=>measure.id===answer.customUnit?.measure),unitValid=customValid||item.units.some(unit=>unit.id===answer?.unitId),unitId=unitValid?answer.unitId:item.unitId;
-      values[item.id]={priceBasis:answer?.priceBasis==='base'?'base':'package',unavailable:answer?.unavailable===true,unitId,brand:clean(answer?.brand).slice(0,120),brandMode:answer?.brandMode||'',otherBrand:clean(answer?.otherBrand).slice(0,120),quantity:answer?(unitValid?String(answer.quantity??''):''):inputNumber(item.quantity),unitPrice:answer&&unitValid?String(answer.unitPrice??''):'',customUnit:{label:clean(answer?.customUnit?.label).slice(0,120),amount:String(answer?.customUnit?.amount??''),measure:allowed.some(measure=>measure.id===answer?.customUnit?.measure)?answer.customUnit.measure:allowed[0]?.id||''}};
+      values[item.id]={priceBasis:answer?.priceBasis==='base'?'base':'package',unavailable:answer?.unavailable===true,unitId,brand:clean(answer?.brand).slice(0,120),observation:clean(answer?.observation).slice(0,500),brandMode:answer?.brandMode||'',otherBrand:clean(answer?.otherBrand).slice(0,120),quantity:answer?(unitValid?String(answer.quantity??''):''):inputNumber(item.quantity),unitPrice:answer&&unitValid?String(answer.unitPrice??''):'',customUnit:{label:clean(answer?.customUnit?.label).slice(0,120),amount:String(answer?.customUnit?.amount??''),measure:allowed.some(measure=>measure.id===answer?.customUnit?.measure)?answer.customUnit.measure:allowed[0]?.id||''}};
     }
     return values;
   }
@@ -72,7 +72,8 @@
     for(const item of quotation.items){
       const value=values[item.id]||{};
       if(value.unavailable===true){answers.push({itemId:item.id,unavailable:true});continue;}
-      const quantity=decimal(value.quantity),unitPrice=decimal(value.unitPrice),brand=clean(value.brand);
+      const quantity=decimal(value.quantity),unitPrice=decimal(value.unitPrice),brand=clean(value.brand),observation=clean(value.observation);
+      if(observation.length>500||/[\u0000-\u001f\u007f]/.test(observation))errors.push({itemId:item.id,field:'observation',message:'Use até 500 caracteres na observação, em uma linha.'});
       let customUnit;
       if(value.unitId==='__custom__'){
         const allowed=customMeasures(item),custom=value.customUnit||{},label=clean(custom.label),amount=decimal(custom.amount);
@@ -90,7 +91,7 @@
       if(brand.length>120||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(brand))errors.push({itemId:item.id,field:'brand',message:'Confira a marca e use até 120 caracteres.'});
       if(value.priceBasis&& !['package','base'].includes(value.priceBasis))errors.push({itemId:item.id,field:'unitPrice',message:'Escolha a unidade do preço.'});
       if(value.priceBasis==='base'){const resolved=offerUnit(item,{...value,customUnit});if(!resolved?.factor||!['kg','L','un'].includes(resolved.base))errors.push({itemId:item.id,field:'unitPrice',message:'Informe o conteúdo da embalagem para cotar por medida.'});}
-      answers.push({itemId:item.id,unitId:value.unitId,brand,quantity,unitPrice,unavailable:false,...(value.priceBasis==='base'?{priceBasis:'base'}:{}),...(customUnit?{customUnit}:{})});
+      answers.push({itemId:item.id,unitId:value.unitId,brand,quantity,unitPrice,unavailable:false,...(observation?{observation}:{}),...(value.priceBasis==='base'?{priceBasis:'base'}:{}),...(customUnit?{customUnit}:{})});
     }
     return {answers,errors};
   }
@@ -99,7 +100,13 @@
     return {count:available.length,total:available.reduce((sum,answer)=>sum+offerTotal(items.find(item=>item.id===answer.itemId)||{units:[]},answer),0),unavailable:answers.filter(answer=>answer.unavailable).length};
   }
   function signature(revision,answers){return JSON.stringify({expectedRevision:revision,answers});}
-  function auctionMinimum(q,itemId){if(!q?.auctionEnabled||q.status!=="answered")return null;return (q.auctionMinima||[]).find(entry=>entry.itemId===itemId&&typeof entry.unitPrice==="number"&&Number.isFinite(entry.unitPrice)&&entry.unitPrice>0&&["kg","L","un"].includes(entry.unit))||null;}
+  function auctionMinimum(q,itemId){
+    if(!q?.auctionEnabled||q.status!=="answered")return null;
+    const item=q.items?.find(item=>item.id===itemId),answer=q.answers?.find(answer=>answer.itemId===itemId),unit=item&&offerUnit(item,answer);
+    const label=clean(unit?.id).toLowerCase().replace(/\s+/g,' ');
+    return (q.auctionMinima||[]).find(entry=>entry.itemId===itemId&&typeof entry.unitPrice==="number"&&Number.isFinite(entry.unitPrice)&&entry.unitPrice>0&&
+      (["kg","L","un"].includes(entry.unit)||!unit?.base&&!unit?.factor&&label&&label!=='__custom__'&&!/^(?:caixa|cx|fardo|fd|saco|sc|pacote|pct|embalagem|lata|balde|pote|garrafa)s?\.?$/i.test(label)&&entry.unit===label&&entry.comparisonKey==='label:'+label))||null;
+  }
   const api={auctionMinimum,tokenFromFragment,decimal,inputNumber,quantityFromTyping,formatPrice,priceFromTyping,priceFromPaste,customMeasures,offerUnit,offerUnitLabel,priceUnitLabel,offerTotal,quotationFromResponse,draftForQuotation,buildAnswers,summary,signature};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.AloQuotationCore=api;
 })(typeof window==='object'?window:globalThis);

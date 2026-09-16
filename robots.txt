@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /
 Disallow: /cotacao/
+Disallow: /auth-callback
 
 Sitemap: https://www.alocozinha.com.br/sitemap.xml
