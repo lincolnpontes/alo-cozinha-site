@@ -108,7 +108,7 @@
       if(field==='brand'&&state.values[itemId].brandMode==='other')state.values[itemId].otherBrand=value;
       state.dirty=true;state.pending=null;
       const refs=state.fields.get(itemId);
-      if(field==='unitId'){state.values[itemId].quantity='';refs.quantity.input.value='';const resolved=Core.offerUnit(state.quotation.items.find(item=>item.id===itemId),state.values[itemId]);if(!resolved?.factor)state.values[itemId].priceBasis='package';}
+      if(field==='unitId'){const resolved=Core.offerUnit(state.quotation.items.find(item=>item.id===itemId),state.values[itemId]);if(!resolved?.factor)state.values[itemId].priceBasis='package';}
       if(['unitId','priceBasis'].includes(field)||(['customAmount','customMeasure'].includes(field)&&state.values[itemId].priceBasis!=='base')){state.values[itemId].unitPrice='';refs.unitPrice.input.value='';}
       for(const ref of Object.values(refs)){if(ref?.input){ref.input.removeAttribute('aria-invalid');ref.error.hidden=true;}}
       refs.fields.hidden=state.values[itemId].unavailable;refs.brand.wrap.hidden=state.values[itemId].unavailable;refs.availability.setAttribute('aria-pressed',String(state.values[itemId].unavailable));
@@ -190,7 +190,11 @@
         dialog.close();renderForm();
       });
       amount.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save.click();}});actions.append(save,cancel);dialog.append(title,body,actions);document.body.append(dialog);
-      dialog.addEventListener('close',()=>{closeUnitChoice();dialog.remove();state.fields.get(item.id)?.unitId.input.focus({preventScroll:true});});dialog.showModal();(nameInput||amount).focus({preventScroll:true});
+      dialog.addEventListener('close',()=>{closeUnitChoice();dialog.remove();state.fields.get(item.id)?.unitId.input.focus({preventScroll:true});});dialog.showModal();
+      const fitDialog=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';};
+      fitDialog();window.visualViewport?.addEventListener('resize',fitDialog);window.visualViewport?.addEventListener('scroll',fitDialog);
+      dialog.addEventListener('close',()=>{window.visualViewport?.removeEventListener('resize',fitDialog);window.visualViewport?.removeEventListener('scroll',fitDialog);});
+      (nameInput||amount).focus({preventScroll:true});(nameInput||amount).select();
     }
     function field(item,index,key,label,type='text'){
       const wrap=el('div','field'),id=`offer-${index}-${key}`,labelNode=el('label','',label);labelNode.htmlFor=id;

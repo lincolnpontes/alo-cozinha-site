@@ -130,3 +130,10 @@ h1{font-size:24px;line-height:1.25;margin:5px 0 14px;overflow-wrap:anywhere}
 .packaging-dialog h2{font-size:18px}.packaging-dialog .custom-content-row{grid-template-columns:90px minmax(0,1fr)}.unit-choice-menu{z-index:20}.packaging-dialog .unit-choice-menu{width:auto}
 @media(max-width:350px){.brand-bar{padding-inline:12px}.brand-inner{gap:8px}.app-brand{gap:6px}.app-brand strong{font-size:18px}.app-brand span{font-size:10px}.restaurant-brand{flex-basis:72px}.brand-inner .restaurant-logo{max-width:72px;max-height:36px}.offer-row{grid-template-columns:55px minmax(0,1fr)}}
 .inline-price-field{grid-template-columns:fit-content(55%) minmax(95px,1fr)}.brand-inner .restaurant-logo{max-height:32px}.price-unit-heading{min-width:0}
+
+/* v2.1.89: logo legível, teclado e foco monetário. */
+.restaurant-brand{flex-basis:130px}.brand-inner .restaurant-logo{max-width:130px;max-height:70px}
+.packaging-dialog{margin:0 auto;top:12px;bottom:auto;overflow:auto;max-height:calc(100dvh - 24px)}
+.money-input{min-width:0;gap:4px}.money-input>span{flex:none;white-space:nowrap}.money-input input{min-width:0;width:100%;padding-left:3px}
+.money-input input:focus-visible{outline:none}.money-input:focus-within{outline:3px solid #8ab8ed;outline-offset:2px}
+@media(max-width:350px){.restaurant-brand{flex-basis:95px}.brand-inner .restaurant-logo{max-width:95px;max-height:62px}}
