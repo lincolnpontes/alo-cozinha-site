@@ -58,7 +58,7 @@
     }
     return q;
   }
-  function draftForQuotation(quotation,previous){
+  function draftSingle(quotation,previous){
     const values=Object.create(null);
     for(const item of quotation.items){
       const answer=(previous&&Object.hasOwn(previous,item.id)?previous[item.id]:null)||(quotation.answers||[]).find(value=>value.itemId===item.id);
@@ -67,7 +67,7 @@
     }
     return values;
   }
-  function buildAnswers(quotation,values){
+  function buildSingleAnswers(quotation,values){
     const answers=[],errors=[];
     for(const item of quotation.items){
       const value=values[item.id]||{};
@@ -95,18 +95,70 @@
     }
     return {answers,errors};
   }
+  function offerQuantity(item,answer){
+    const requested=item.units.find(unit=>unit.id===item.unitId),offered=offerUnit(item,answer);
+    if(requested?.base&&requested.base===offered?.base&&requested.factor>0&&offered.factor>0){
+      // Decimal arithmetic matches PostgreSQL round(numeric,6), including half-way values.
+      const fraction=value=>{const [mantissa,exponent='0']=String(value).toLowerCase().split('e'),parts=mantissa.split('.'),scale=(parts[1]?.length||0)-Number(exponent),n=BigInt(parts.join(''));return scale>=0?[n,10n**BigInt(scale)]:[n*10n**BigInt(-scale),1n];};
+      try{const [qn,qd]=fraction(item.quantity),[rn,rd]=fraction(requested.factor),[on,od]=fraction(offered.factor),n=qn*rn*od*1000000n,d=qd*rd*on;return d>0n?Number(n/d+(n%d*2n>=d?1n:0n))/1000000:null;}catch{return null;}
+    }
+    return requested?.id===offered?.id?Number(item.quantity):null;
+  }
+  function emptyOffer(item,id){
+    return {...draftSingle({items:[item]})[item.id],offerId:id||root.crypto?.randomUUID?.()||'offer-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2),commercialization:null};
+  }
+  const brandKey=value=>clean(value).toLocaleLowerCase('pt-BR').replace(/\s+/g,' ');
+  function draftForQuotation(quotation,previous){
+    const values=Object.create(null);
+    for(const item of quotation.items){
+      const saved=(quotation.answers||[]).filter(a=>a.itemId===item.id),excluded=saved.filter(a=>a.excluded),old=previous?.[item.id];
+      const raw=Array.isArray(old?.offers)?old.offers:old?[old]:saved.filter(a=>!a.unavailable&&!a.excluded);
+      const offers=raw.filter(a=>!a.excluded&&!excluded.some(e=>(e.offerId||'default')===(a.offerId||'default')||brandKey(e.brand)===brandKey(a.brand))).map(a=>{
+        const single=draftSingle({items:[item],answers:[{...a,itemId:item.id}]})[item.id];
+        const value={...single,offerId:a.offerId||'default',commercialization:a.commercialization?{...a.commercialization}:null},quantity=offerQuantity(item,value);value.quantity=quantity>0?inputNumber(quantity):'';return value;
+      });
+      values[item.id]={unavailable:old?.unavailable??saved.some(a=>a.unavailable),offers:offers.length?offers:[emptyOffer(item)],excludedOffers:excluded};
+    }
+    return values;
+  }
+  function buildAnswers(quotation,values){
+    const answers=[],errors=[];
+    for(const item of quotation.items){
+      const entry=values[item.id]||{};
+      if(!Array.isArray(entry.offers)){const built=buildSingleAnswers({items:[item]},{[item.id]:entry});answers.push(...built.answers);errors.push(...built.errors);continue;}
+      if(entry.unavailable){answers.push({itemId:item.id,unavailable:true});continue;}
+      if(!entry.offers.length||entry.offers.length>5){errors.push({itemId:item.id,field:'brand',message:'Informe de uma a cinco marcas para este item.'});continue;}
+      const ids=new Set(),brands=new Set();
+      for(const value of entry.offers){
+        const id=value.offerId,quantity=offerQuantity(item,value),key=brandKey(value.brand);
+        const localErrors=[];
+        if(typeof id!=='string'||!/^[A-Za-z0-9_-]{1,80}$/.test(id)||ids.has(id))localErrors.push({field:'brand',message:'Atualize a página para conferir esta oferta.'});ids.add(id);
+        if(brands.has(key))localErrors.push({field:'brand',message:'Esta marca já foi informada neste item.'});brands.add(key);
+        if((quotation.answers||[]).some(a=>a.itemId===item.id&&a.excluded&&((a.offerId||'default')===id||brandKey(a.brand)===key)))localErrors.push({field:'brand',message:'Esta oferta foi excluída pelo restaurante. Informe outra marca.'});
+        if((item.rejectedBrands||[]).some(b=>brandKey(b)===key))localErrors.push({field:'brand',message:'Esta marca não é aceita pelo restaurante.'});
+        const built=buildSingleAnswers({items:[item]},{[item.id]:{...value,quantity:inputNumber(quantity)}});localErrors.push(...built.errors);
+        const c=value.commercialization,allowed=customMeasures(item),measuresAllowed=allowed.length?allowed.map(m=>m.id):[item.unitId];
+        const commercialAmount=decimal(c?.amount);
+        if(!c||!['unit','box','bundle','other'].includes(c.kind)||!clean(c.label)||clean(c.label).length>120||/[\u0000-\u001f\u007f]/.test(clean(c.label))||!Number.isFinite(commercialAmount)||commercialAmount<=0||commercialAmount>1e9||!measuresAllowed.includes(c.measure))localErrors.push({field:'commercialization',message:'Informe como este produto é comercializado.'});
+        errors.push(...localErrors.map(error=>({...error,itemId:item.id,offerId:id})));
+        if(built.answers[0])answers.push({...built.answers[0],offerId:id,...(c?{commercialization:{kind:c.kind,label:clean(c.label),amount:commercialAmount,measure:c.measure}}:{})});
+      }
+    }
+    return {answers,errors};
+  }
   function summary(answers,items=[]){
-    const available=answers.filter(answer=>!answer.unavailable&&Number.isFinite(answer.quantity)&&Number.isFinite(answer.unitPrice));
-    return {count:available.length,total:available.reduce((sum,answer)=>sum+offerTotal(items.find(item=>item.id===answer.itemId)||{units:[]},answer),0),unavailable:answers.filter(answer=>answer.unavailable).length};
+    const available=answers.filter(answer=>!answer.unavailable&&!answer.excluded&&Number.isFinite(answer.quantity)&&Number.isFinite(answer.unitPrice)),totals=new Map();
+    for(const answer of available){const total=offerTotal(items.find(item=>item.id===answer.itemId)||{units:[]},answer);if(Number.isFinite(total)&&(!totals.has(answer.itemId)||totals.get(answer.itemId)>total))totals.set(answer.itemId,total);}
+    return {count:totals.size,total:[...totals.values()].reduce((sum,total)=>sum+total,0),unavailable:new Set(answers.filter(answer=>answer.unavailable).map(a=>a.itemId)).size};
   }
   function signature(revision,answers){return JSON.stringify({expectedRevision:revision,answers});}
   function auctionMinimum(q,itemId){
     if(!q?.auctionEnabled||q.status!=="answered")return null;
-    const item=q.items?.find(item=>item.id===itemId),answer=q.answers?.find(answer=>answer.itemId===itemId),unit=item&&offerUnit(item,answer);
+    const item=q.items?.find(item=>item.id===itemId),answer=q.answers?.find(answer=>answer.itemId===itemId&&!answer.excluded&&!answer.unavailable),unit=item&&offerUnit(item,answer);
     const label=clean(unit?.id).toLowerCase().replace(/\s+/g,' ');
     return (q.auctionMinima||[]).find(entry=>entry.itemId===itemId&&typeof entry.unitPrice==="number"&&Number.isFinite(entry.unitPrice)&&entry.unitPrice>0&&
       (["kg","L","un"].includes(entry.unit)||!unit?.base&&!unit?.factor&&label&&label!=='__custom__'&&!/^(?:caixa|cx|fardo|fd|saco|sc|pacote|pct|embalagem|lata|balde|pote|garrafa)s?\.?$/i.test(label)&&entry.unit===label&&entry.comparisonKey==='label:'+label))||null;
   }
-  const api={auctionMinimum,tokenFromFragment,decimal,inputNumber,quantityFromTyping,formatPrice,priceFromTyping,priceFromPaste,customMeasures,offerUnit,offerUnitLabel,priceUnitLabel,offerTotal,quotationFromResponse,draftForQuotation,buildAnswers,summary,signature};
+  const api={auctionMinimum,tokenFromFragment,decimal,inputNumber,quantityFromTyping,formatPrice,priceFromTyping,priceFromPaste,customMeasures,offerUnit,offerUnitLabel,priceUnitLabel,offerTotal,offerQuantity,emptyOffer,quotationFromResponse,draftForQuotation,buildAnswers,summary,signature};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.AloQuotationCore=api;
 })(typeof window==='object'?window:globalThis);

@@ -148,3 +148,18 @@ h1{font-size:24px;line-height:1.25;margin:5px 0 14px;overflow-wrap:anywhere}
 .price-observation-row .money-input{min-height:46px;box-sizing:border-box}
 .observation-field{min-width:0}.observation-field input{min-width:0;width:100%;box-sizing:border-box}
 .answer-observation{white-space:pre-wrap}
+/* v2.1.93: alternativas por marca, quantidade solicitada fixa e embalagem separada. */
+.supplier-guidance{padding:0;margin:12px 0 16px;background:none;border:0;border-radius:0;color:#64716c;font-size:12px;line-height:1.5}
+.item-card{position:relative}.item-card>.availability-toggle{display:block;margin:7px 0 5px auto;min-height:40px;padding:6px 10px;white-space:pre-line}
+.brand-offer-fields{display:grid;gap:10px;border-top:1px solid #e2e7e4;padding:12px 0}.brand-offer-fields:first-child{border-top:0;padding-top:2px}
+.brand-offer-heading{display:flex;justify-content:space-between;align-items:center;min-height:32px;font-size:12px;color:#577266}.brand-offer-heading .text-button{background:transparent;border:0;color:#a04c42;padding:5px;font-size:12px;min-height:36px}
+.unit-price-row{display:grid;grid-template-columns:48px minmax(70px,.85fr) minmax(104px,1.15fr);align-items:start;gap:9px}
+.unit-price-row>.field{min-width:0;margin:0}.unit-price-row>.field>label,.unit-price-row .field-label{display:block;min-height:28px;margin-bottom:5px;font-size:12px;line-height:1.2}
+.fixed-quantity output{display:flex;align-items:center;justify-content:center;height:46px;box-sizing:border-box;border-radius:6px;background:#eff3f1;color:#364b40;font-size:15px;font-weight:600}
+.unit-price-row .unit-choice-trigger{min-height:46px;padding:9px 7px;font-size:14px}.unit-price-row .money-input{min-height:46px;box-sizing:border-box;padding-left:7px}.unit-price-row .money-input input{font-size:15px;padding-right:5px}
+.commercialization-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(86px,.55fr);gap:9px;align-items:end}.commercialization-field{min-width:0}.commercialization-row .observation-toggle{border:1px solid #cbd8d2;background:#f5f9f6;border-radius:7px;min-height:46px;padding:7px 9px;font-size:12px;line-height:1.2;color:#426553;cursor:pointer}
+.commercialization-field .unit-choice-trigger{min-height:46px;font-size:14px;padding:9px}.commercialization-field label{font-size:12px}.brand-offer-fields>.field{margin:0}.brand-offer-fields>.item-total{margin:0}
+.add-brand-offer{width:100%;min-height:44px;border:1px dashed #aac4b6;background:#f4f9f6;border-radius:7px;color:#296449;font-size:13px;font-weight:600;padding:9px;cursor:pointer}
+.item-offers[hidden],.brand-offer-fields>[hidden]{display:none!important}
+.item-card .item-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}.item-heading-copy{flex:1;min-width:0}.item-heading-copy .requested{text-align:left;font-size:14px;margin-top:3px}.item-header>.availability-toggle{flex:0 0 auto;margin:0;min-height:42px;padding:5px 9px;font-size:12px}.brand-offer-fields>.item-total>span,.brand-offer-fields>.item-total>strong{min-height:0;margin:0}
+@media(max-width:350px){.unit-price-row{grid-template-columns:40px minmax(64px,.8fr) minmax(93px,1.2fr);gap:6px}.unit-price-row .unit-choice-trigger{font-size:13px;padding-inline:5px}.unit-price-row .money-input input{font-size:14px}.commercialization-row{grid-template-columns:minmax(0,1fr) 95px;gap:6px}.commercialization-field .unit-choice-trigger{font-size:13px;padding:7px}}
