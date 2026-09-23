@@ -41,7 +41,7 @@
     const root=options.root||document.getElementById('quotationApp'),token=options.token||'';
     instances.get(root)?.();
     const transport=options.transport||((action,payload)=>request(token,action,payload));
-    const state={quotation:null,values:null,pending:null,busy:false,loading:false,dirty:false,key:'',storage:null,localSaved:false,fields:new Map(),offerValues:new Map(),dialog:null,unitChoice:null};
+    const state={quotation:null,values:null,pending:null,busy:false,loading:false,dirty:false,key:'',storage:null,localSaved:false,fields:new Map(),offerValues:new Map(),itemSaveButtons:new Map(),dialog:null,unitChoice:null};
     let auctionTimer=null,auctionBusy=false,disposed=false,auctionClosed=false;
     const stopAuction=()=>{clearTimeout(auctionTimer);auctionTimer=null;};
     function auctionOpen(){return !disposed&&!auctionClosed&&state.quotation?.auctionEnabled&&state.quotation.status==='answered'&&Date.parse(state.quotation.expiresAt)>Date.now();}
@@ -109,25 +109,29 @@
       const supplier=el('div','request-line');supplier.append(el('span','eyebrow','Fornecedor'),el('h1','',quotation.supplierName||'Sua cotação'));
       const recipient=el('div','request-line'),identity=el('div','request-identity');identity.append(el('strong','',quotation.legalName||quotation.restaurantName||'Restaurante'));if(quotation.cnpj)identity.append(el('small','', 'CNPJ: '+String(quotation.cnpj).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5')));recipient.append(el('span','eyebrow','Solicitante'),identity);
       const brand=document.querySelector('.brand-inner');if(brand){if(!brand.dataset.appBrand){brand.dataset.appBrand='true';const app=el('div','app-brand');while(brand.firstChild)app.append(brand.firstChild);brand.append(app);}brand.querySelector('.restaurant-brand')?.remove();const restaurant=el('div','restaurant-brand');if(/^data:image\/(png|jpeg|webp);base64,/i.test(quotation.logoDataUrl||'')){const logo=el('img','restaurant-logo');logo.src=quotation.logoDataUrl;logo.alt=quotation.restaurantName||'Restaurante';restaurant.append(logo);}else restaurant.append(el('span','restaurant-name',quotation.restaurantName||''));brand.append(restaurant);}
-      const deadline=el('p','deadline');deadline.append(icon('clock'),el('span','',`Responder até ${date(quotation.expiresAt)}`));panel.append(supplier,recipient,deadline);
+      panel.append(supplier,recipient);
       return panel;
     }
+    function quotationDeadline(quotation){const node=el('p','deadline quotation-deadline');node.append(icon('clock'),el('span','',`Responder até ${date(quotation.expiresAt)}`));return node;}
     function answerList(quotation,answers){
       const list=el('ul','answer-list');
       for(const item of quotation.items){
-        for(const answer of answers.filter(value=>value.itemId===item.id&&!value.excluded)){
-        const row=el('li',`answer-item${answer.unavailable?' unavailable':''}`);row.append(el('strong','',item.name));
-        if(answer.unavailable)row.append(el('p','','Indisponível'));
-        else{
-          const label=Core.offerUnitLabel(item,answer);
-          row.append(el('p','',`${number(answer.quantity)} × ${label}${answer.brand?' · '+answer.brand:''}`));
-          row.append(el('p','answer-price',`${currency(answer.unitPrice,4)} por ${Core.priceUnitLabel(item,answer)} · Total ${currency(Core.offerTotal(item,answer))}`));
-          if(answer.commercialization)row.append(el('p','',answer.commercialization.label+' · '+number(answer.commercialization.amount)+' '+answer.commercialization.measure));
-          if(answer.observation)row.append(el('p','answer-observation',answer.observation));
-          if(quotation.auctionEnabled&&quotation.status==='answered')row.append(auctionPrice(item.id));
+        const alternatives=answers.filter(value=>value.itemId===item.id&&!value.excluded);if(!alternatives.length)continue;
+        const row=el('li','answer-item');row.append(el('strong','answer-product-name',item.name));
+        for(const answer of alternatives){
+          const offer=el('div','answer-alternative');
+          if(answer.unavailable)offer.append(el('p','','Indisponível'));
+          else{
+            if(answer.brand)offer.append(el('strong','answer-brand',answer.brand));
+            offer.append(el('p','',`${number(answer.quantity)} × ${Core.offerUnitLabel(item,answer)}`));
+            offer.append(el('p','answer-price',`${currency(answer.unitPrice,4)} por ${Core.priceUnitLabel(item,answer)} · Total ${currency(Core.offerTotal(item,answer))}`));
+            if(answer.commercialization){const c=answer.commercialization;offer.append(el('p','',c.kind==='unit'?c.label:`${c.label} com ${number(c.amount)} ${c.measure}`));}
+            if(answer.observation)offer.append(el('p','answer-observation',answer.observation));
+          }
+          row.append(offer);
         }
+        if(quotation.auctionEnabled&&quotation.status==='answered'&&alternatives.some(answer=>!answer.unavailable))row.append(auctionPrice(item.id));
         list.append(row);
-        }
       }
       return list;
     }
@@ -139,13 +143,13 @@
       const auction=auctionPanel();if(auction)panel.append(auction);
       if((q.answers||[]).length){panel.append(el('h2','submitted-heading','Sua resposta'),answerList(q,q.answers));const totals=Core.summary(q.answers,q.items),line=el('div','review-total',hasAlternatives(q.answers)?'Menor total por item':'Total ofertado');line.append(el('strong','',currency(totals.total)));panel.append(line);}
       if(!closed)panel.append(button('Editar proposta','secondary',()=>{state.values=Core.draftForQuotation(q);state.pending=null;renderForm();}));
-      root.replaceChildren(header(q),panel);panel.classList.add('receipt-panel');root.setAttribute('aria-busy','false');heading.focus({preventScroll:true});
+      root.replaceChildren(header(q),panel);panel.classList.add('receipt-panel');root.setAttribute('aria-busy','false');heading.focus({preventScroll:true});global.scrollTo?.({top:0,behavior:'auto'});
     }
     function updateTotals(){
       const built=Core.buildAnswers(state.quotation,state.values),invalid=new Set(built.errors.map(error=>error.itemId)),totals=Core.summary(built.answers,state.quotation.items);
       progress.textContent='';progress.hidden=true;
       totalAmount.textContent=currency(totals.total);
-      summaryCount.textContent=`${totals.count} ${totals.count===1?'item ofertado':'itens ofertados'}${hasAlternatives(built.answers)?' · menor total':''}${totals.unavailable?' · '+totals.unavailable+' indisponíveis':''}`;
+      summaryCount.textContent=`${totals.count} ${totals.count===1?'item ofertado':'itens ofertados'}${totals.unavailable?' · '+totals.unavailable+' indisponíveis':''}`;
       for(const [key,entry] of state.offerValues){const refs=state.fields.get(key),item=entry.item,value=entry.value,quantity=quantityFor(item,value),price=Core.decimal(value.unitPrice);if(!refs)continue;value.quantity=quantity===null?'':Core.inputNumber(quantity);refs.quantity.input.textContent=quantity===null?'—':number(quantity);refs.total.textContent=!state.values[item.id].unavailable&&quantity>0&&price>0?currency(Core.offerTotal(item,{...value,quantity,unitPrice:price})):'—';refs.refreshPriceUnit();refs.refreshPackaging?.();}
     }
     function changed(itemId,field,value){
@@ -153,6 +157,7 @@
       if(customKey)valueFor(itemId).customUnit[customKey]=value;else valueFor(itemId)[field]=value;
       if(field==='brand'&&valueFor(itemId).brandMode==='other')valueFor(itemId).otherBrand=value;
       state.dirty=true;state.pending=null;
+      const savedButton=state.itemSaveButtons.get(sourceFor(itemId)?.id);if(savedButton)savedButton.textContent='Salvar';
       const refs=state.fields.get(itemId);
       if(field==='unitId'){const resolved=Core.offerUnit(sourceFor(itemId),valueFor(itemId));if(!resolved?.factor)valueFor(itemId).priceBasis='package';}
       if(['unitId','priceBasis'].includes(field)||(['customAmount','customMeasure'].includes(field)&&valueFor(itemId).priceBasis!=='base')){valueFor(itemId).unitPrice='';refs.unitPrice.input.value='';}
@@ -288,9 +293,9 @@
     }
     function offerCard(item,index,offerIndex){
       const value=valueFor(item.id),source=sourceFor(item.id),fields=el('div','brand-offer-fields');
-      const bar=el('div','brand-offer-heading');bar.append(el('strong','','Oferta '+(offerIndex+1)));
+      const bar=el('div','brand-offer-heading');
       if(state.values[source.id].offers.length>1)bar.append(button('Remover','text-button',()=>{state.values[source.id].offers=state.values[source.id].offers.filter(offer=>offer!==value);state.dirty=true;state.pending=null;saveDraft();renderForm();}));
-      fields.append(bar);
+      if(bar.children.length)fields.append(bar);
       const brand=brandField(item,index);fields.append(brand.wrap);
       const quantityWrap=el('div','field fixed-quantity'),quantityLabel=el('span','field-label','Qtde'),quantityText=el('output');quantityText.textContent=number(quantityFor(source,value));quantityWrap.append(quantityLabel,quantityText);
       const quantity={wrap:quantityWrap,input:quantityText,error:el('p','field-error')},unitId=field(item,index,'unitId','Unidade','select'),unitPrice=field(item,index,'unitPrice','Preço por unidade'),row=el('div','unit-price-row');
@@ -319,16 +324,23 @@
       for(const [offerIndex,value]of data.offers.entries()){
         if(value.excluded)continue;const key=fieldKey(item.id,value.offerId),clone={...item,id:key};state.offerValues.set(key,{item,value});offers.append(offerCard(clone,index+'-'+offerIndex,offerIndex));
       }
-      if(data.offers.length<5)offers.append(button('Adicionar outra marca','add-brand-offer',()=>{data.offers.push(Core.emptyOffer(item,operationId()));state.dirty=true;state.pending=null;saveDraft();renderForm();}));
+      const actions=el('div','item-offer-actions'),save=button('Salvar','save-item-offer',()=>{
+        const built=Core.buildAnswers({...state.quotation,items:[item]},{[item.id]:data});if(built.errors.length){showErrors(built.errors);return;}
+        saveDraft();save.textContent=state.localSaved?'Salvo':'Conferido';save.setAttribute('aria-label',state.localSaved?'Rascunho deste item salvo no aparelho':'Item conferido. Envie a proposta ao finalizar.');
+      });state.itemSaveButtons.set(item.id,save);actions.append(save);
+      if(data.offers.length<5)actions.append(button('Adicionar outra marca','add-brand-offer',()=>{
+        const built=Core.buildAnswers({...state.quotation,items:[item]},{[item.id]:data});if(built.errors.length){showErrors(built.errors);return;}
+        const value=Core.emptyOffer(item,operationId());data.offers.push(value);state.dirty=true;state.pending=null;saveDraft();renderForm();
+        const next=state.fields.get(fieldKey(item.id,value.offerId))?.brand;next?.wrap.scrollIntoView({block:'center',behavior:'auto'});next?.input.focus({preventScroll:true});
+      }));offers.append(actions);
       card.append(offers);if(state.quotation.auctionEnabled&&state.quotation.status==='answered')card.append(auctionPrice(item.id));return card;
     }
     function renderForm(message=''){
       closeUnitChoice();
-      state.fields.clear();state.offerValues.clear();const form=el('form');form.noValidate=true;form.addEventListener('submit',event=>{event.preventDefault();review();});
-      const heading=el('div','section-heading');progress=el('span','progress');progress.setAttribute('role','status');heading.append(el('h2','','Proposta'),progress);form.append(heading);
+      state.fields.clear();state.offerValues.clear();state.itemSaveButtons.clear();const form=el('form');form.noValidate=true;form.addEventListener('submit',event=>{event.preventDefault();review();});
+      const heading=el('div','section-heading quotation-heading');progress=el('span','progress');progress.setAttribute('role','status');heading.append(el('h2','','Cotação'),quotationDeadline(state.quotation),progress);form.append(heading);
       formNotice=el('div');if(message)formNotice.append(notice(message,'warning'));form.append(formNotice);
       const auction=auctionPanel();if(auction)form.append(auction);
-      form.append(el('p','supplier-guidance','Dúvidas em relação a itens (substituição de produto, marcas, tamanho da embalagem, dentre outras) fale com o responsável do estabelecimento.'));
       const list=el('div','item-list');state.quotation.items.forEach((item,index)=>list.append(itemCard(item,index)));form.append(list);
       const actions=el('div','proposal-actions'),summary=el('div','proposal-summary');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));actions.append(summary,submit);form.append(actions);
       root.replaceChildren(header(state.quotation),form);root.setAttribute('aria-busy','false');updateTotals();
