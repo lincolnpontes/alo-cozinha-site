@@ -17,7 +17,7 @@
   function button(text,kind,action){const node=el('button',`button ${kind}`,text);node.type='button';if(action)node.addEventListener('click',action);return node;}
   function notice(text,kind=''){const box=el('div',`notice ${kind}`);box.setAttribute('role',kind==='error'?'alert':'status');box.append(icon(kind==='success'?'check':'alert'),el('p','',text));return box;}
   function apiError(code){const error=new Error(code);error.code=code;return error;}
-  function errorText(code){return ({quotation_unavailable:'Este link expirou ou não está mais disponível. Peça um novo link ao restaurante.',quotation_closed:'O restaurante já encerrou esta cotação.',quotation_conflict:'A cotação foi atualizada. Seus dados foram mantidos; confira os itens e revise a proposta novamente.',quotation_limit:'Esta cotação atingiu o limite de alterações. Peça um novo link ao restaurante.',invalid_quotation:'Confira as quantidades, as embalagens e os preços antes de enviar.',rate_limited:'Muitas tentativas em sequência. Aguarde um momento e tente novamente.',invalid_response:'Não foi possível carregar os dados da cotação. Tente novamente.'})[code]||'Não foi possível confirmar a operação. Confira sua conexão e tente novamente. Seus dados foram mantidos.';}
+  function errorText(code){return ({quotation_unavailable:'Este convite terminou ou foi encerrado pelo restaurante. Para enviar uma nova cotação, peça outro link ao estabelecimento.',quotation_closed:'O restaurante já encerrou esta cotação.',quotation_conflict:'A cotação foi atualizada. Seus dados foram mantidos; confira os itens e revise a proposta novamente.',quotation_limit:'Esta cotação atingiu o limite de alterações. Peça um novo link ao restaurante.',invalid_quotation:'Confira as quantidades, as embalagens e os preços antes de enviar.',rate_limited:'Muitas tentativas em sequência. Aguarde um momento e tente novamente.',invalid_response:'Não foi possível carregar os dados da cotação. Tente novamente.'})[code]||'Não foi possível confirmar a operação. Confira sua conexão e tente novamente. Seus dados foram mantidos.';}
   async function request(token,action,payload={}){
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
     try{
@@ -98,8 +98,8 @@
     function fatal(code,retry=true){
       stopAuction();auctionClosed=true;
       state.dialog?.close();root.setAttribute('aria-busy','false');
-      const panel=el('section','state-panel'),mark=el('div','state-mark');mark.append(icon('alert'));
-      const heading=el('h1','',code==='missing_token'?'Abra o link da cotação':'Cotação indisponível');heading.tabIndex=-1;
+      const panel=el('section','state-panel unavailable-panel'),mark=el('div','state-mark');mark.append(icon(code==='quotation_unavailable'?'clock':'alert'));
+      const heading=el('h1','',code==='missing_token'?'Abra seu convite':code==='quotation_unavailable'?'Prazo encerrado':'Vamos reconectar');heading.tabIndex=-1;
       panel.append(mark,heading,el('p','',code==='missing_token'?'Use o link que o restaurante enviou para você responder à cotação.':errorText(code)));
       if(retry)panel.append(button('Tentar novamente','primary',()=>load({preserve:true})));
       root.replaceChildren(panel);heading.focus({preventScroll:true});
@@ -142,7 +142,7 @@
       if(q.submittedAt)panel.append(el('p','',`Enviada em ${date(q.submittedAt)}`));
       const auction=auctionPanel();if(auction)panel.append(auction);
       if((q.answers||[]).length){panel.append(el('h2','submitted-heading','Sua resposta'),answerList(q,q.answers));const totals=Core.summary(q.answers,q.items),line=el('div','review-total',hasAlternatives(q.answers)?'Menor total por item':'Total ofertado');line.append(el('strong','',currency(totals.total)));panel.append(line);}
-      if(!closed)panel.append(button('Editar proposta','secondary',()=>{state.values=Core.draftForQuotation(q);state.pending=null;renderForm();}));
+      if(!closed)panel.append(button('Editar proposta','secondary',()=>{state.values=Core.draftForQuotation(q);state.pending=null;state.dirty=true;state.editing=true;saveDraft();renderForm();global.scrollTo?.({top:0,behavior:'auto'});}));
       root.replaceChildren(header(q),panel);panel.classList.add('receipt-panel');root.setAttribute('aria-busy','false');heading.focus({preventScroll:true});global.scrollTo?.({top:0,behavior:'auto'});
     }
     function updateTotals(){
@@ -318,7 +318,7 @@
     }
     function editOffer(item,index,offerId,adding=false){
       if(state.offerDialog?.open)return;
-      const original=JSON.parse(JSON.stringify(state.values[item.id])),priorDirty=state.dirty,priorPending=state.pending;
+      const priorScroll=global.scrollY,original=JSON.parse(JSON.stringify(state.values[item.id])),priorDirty=state.dirty,priorPending=state.pending;
       const data=state.values[item.id];data.unavailable=false;
       let value=data.offers.find(v=>v.offerId===offerId);
       if(adding){if(data.offers.length>=5)return;value=Core.emptyOffer(item,operationId());data.offers.push(value);}
@@ -341,14 +341,14 @@
       dialog.addEventListener('close',()=>{
         closeUnitChoice();if(!committed){state.values[item.id]=original;state.dirty=priorDirty;state.pending=priorPending;saveDraft();}
         window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);dialog.remove();state.offerDialog=null;renderForm();
-        document.getElementById('item-'+index)?.focus({preventScroll:true});
+        document.getElementById('item-'+index)?.focus({preventScroll:true});global.scrollTo?.({top:priorScroll,behavior:'auto'});
       });
       dialog.showModal();fit();window.visualViewport?.addEventListener('resize',fit);window.visualViewport?.addEventListener('scroll',fit);updateTotals();title.focus({preventScroll:true});
     }
     function itemCard(item,index){
       const data=state.values[item.id],card=el('section','item-card compact-quotation-item'),head=el('div','item-header'),name=el('h3','',`${index+1}. ${item.name}`);
       name.id='item-'+index;name.tabIndex=-1;card.setAttribute('aria-labelledby',name.id);
-      const requestedUnit=item.units.find(unit=>unit.id===item.unitId),requested=el('p','requested',`${number(item.quantity)} × ${requestedUnit.label}`);head.append(name,requested);card.append(head);
+      const requestedUnit=item.units.find(unit=>unit.id===item.unitId)||{label:item.unitId},requested=el('p','requested',`${number(item.quantity)} × ${requestedUnit.label}`);head.append(name,requested);card.append(head);
       const filled=data.offers.filter(v=>!v.excluded&&(v.brand||Core.decimal(v.unitPrice)>0||v.commercialization));
       const complete=!data.unavailable&&filled.some(v=>v.brand&&Core.decimal(v.unitPrice)>0&&v.commercialization);
       if(!data.unavailable&&filled.length){
@@ -402,7 +402,7 @@
       state.busy=true;back.disabled=true;send.disabled=true;send.textContent='Enviando…';feedback.replaceChildren();
       const {operationId,expectedRevision,answers}=state.pending;
       try{
-        const result=await transport('quotation_submit',{operationId,expectedRevision,answers});state.quotation=Core.quotationFromResponse(result);clearDraft();state.dialog.close();receipt();
+        const result=await transport('quotation_submit',{operationId,expectedRevision,answers});state.quotation=Core.quotationFromResponse(result);clearDraft();state.dialog.close();state.dialog.remove();state.dialog=null;state.offerDialog=null;state.editing=false;receipt();
       }catch(error){
         const code=error.code||error.message;
         if(code==='quotation_conflict'||code==='quotation_closed'){state.dialog.close();state.pending=null;await load({preserve:true,message:errorText(code)});}
