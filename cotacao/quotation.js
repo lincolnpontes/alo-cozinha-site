@@ -135,14 +135,27 @@
       }
       return list;
     }
+    async function editSubmittedProposal(){
+      if(state.busy||state.loading)return;
+      state.busy=true;const edit=root.querySelector('[data-edit-proposal]');if(edit){edit.disabled=true;edit.textContent='Abrindo edição…';}
+      try{
+        const fresh=Core.quotationFromResponse(await transport('quotation_view'));state.quotation=fresh;
+        if(fresh.status==='ordered'){receipt();return;}
+        if(Date.parse(fresh.expiresAt)<=Date.now()){fatal('quotation_unavailable',false);return;}
+        state.dialog?.close();state.dialog?.remove();state.dialog=null;
+        state.values=Core.draftForQuotation(fresh);state.pending=null;state.dirty=true;state.editing=true;saveDraft();renderForm();global.scrollTo?.({top:0,behavior:'auto'});
+      }catch(error){if(error.code==='quotation_unavailable')fatal(error.code,false);else{root.querySelector('.edit-proposal-feedback')?.remove();const feedback=notice(errorText(error.code||error.message),'error');feedback.classList.add('edit-proposal-feedback');edit?.after(feedback);}}
+      finally{state.busy=false;if(edit?.isConnected){edit.disabled=false;edit.textContent='Editar proposta';}}
+    }
     function receipt(){
       const q=state.quotation,closed=q.status==='ordered',panel=el('section','state-panel'),mark=el('div',closed?'state-mark':'state-mark success');mark.append(icon(closed?'clock':'check'));
       const heading=el('h1','',closed?'Cotação encerrada':'Proposta enviada');heading.tabIndex=-1;
       panel.append(mark,heading,el('p','',closed?'O restaurante encerrou esta cotação. Não é mais possível enviar ou alterar a proposta.':`${q.restaurantName||'O restaurante'} recebeu sua proposta.`));
       if(q.submittedAt)panel.append(el('p','',`Enviada em ${date(q.submittedAt)}`));
+      if(!closed){const edit=button('Editar proposta','primary edit-submitted-proposal',editSubmittedProposal);edit.dataset.editProposal='';panel.append(edit);}
       const auction=auctionPanel();if(auction)panel.append(auction);
       if((q.answers||[]).length){panel.append(el('h2','submitted-heading','Sua resposta'),answerList(q,q.answers));const totals=Core.summary(q.answers,q.items),line=el('div','review-total',hasAlternatives(q.answers)?'Menor total por item':'Total ofertado');line.append(el('strong','',currency(totals.total)));panel.append(line);}
-      if(!closed)panel.append(button('Editar proposta','secondary',()=>{state.values=Core.draftForQuotation(q);state.pending=null;state.dirty=true;state.editing=true;saveDraft();renderForm();global.scrollTo?.({top:0,behavior:'auto'});}));
+
       root.replaceChildren(header(q),panel);panel.classList.add('receipt-panel');root.setAttribute('aria-busy','false');heading.focus({preventScroll:true});global.scrollTo?.({top:0,behavior:'auto'});
     }
     function updateTotals(){
@@ -236,7 +249,7 @@
       });
       amount.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save.click();}});actions.append(save,cancel);dialog.append(title,body,actions);document.body.append(dialog);
       dialog.addEventListener('close',()=>{closeUnitChoice();dialog.remove();state.fields.get(item.id)?.commercialization.input.focus({preventScroll:true});});dialog.showModal();
-      const fitDialog=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';};
+      const fitDialog=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';if(document.activeElement?.closest('.observation-field'))requestAnimationFrame(()=>document.activeElement?.scrollIntoView({block:'center',behavior:'auto'}));};
       fitDialog();window.visualViewport?.addEventListener('resize',fitDialog);window.visualViewport?.addEventListener('scroll',fitDialog);
       dialog.addEventListener('close',()=>{window.visualViewport?.removeEventListener('resize',fitDialog);window.visualViewport?.removeEventListener('scroll',fitDialog);});
       (nameInput||amount).focus({preventScroll:true});(nameInput||amount).select();
@@ -309,8 +322,8 @@
       });
       commercializationLabel.htmlFor=choice.trigger.id='commercialization-'+index;commercializationWrap.append(commercializationLabel,choice.container,commercializationError);
       function refreshPackaging(){const form=value.commercialization;choice.copy.textContent=!form?'Selecionar':form.kind==='unit'?form.label:`${form.label} com ${number(form.amount)} ${form.measure}`;choice.trigger.value=form?.kind||'';choice.menu.querySelectorAll('[role=option]').forEach(node=>node.setAttribute('aria-selected',String(node.dataset.value===form?.kind)));}
-      const observation=field(item,index,'observation','Observação');observation.input.placeholder='Detalhes desta oferta';observation.wrap.hidden=!value.observation;
-      const addObservation=button(value.observation?'Observação':'Adicionar observação','observation-toggle',()=>{observation.wrap.hidden=!observation.wrap.hidden;addObservation.setAttribute('aria-expanded',String(!observation.wrap.hidden));if(!observation.wrap.hidden)observation.input.focus();});addObservation.setAttribute('aria-expanded',String(!observation.wrap.hidden));
+      const observation=field(item,index,'observation','Observação');observation.wrap.classList.add('observation-field');observation.input.placeholder='Detalhes desta oferta';observation.wrap.hidden=!value.observation;
+      const addObservation=button(value.observation?'Observação':'Adicionar observação','observation-toggle',()=>{observation.wrap.hidden=!observation.wrap.hidden;addObservation.setAttribute('aria-expanded',String(!observation.wrap.hidden));if(!observation.wrap.hidden){observation.input.focus({preventScroll:true});requestAnimationFrame(()=>observation.wrap.scrollIntoView({block:'center',behavior:'smooth'}));}});addObservation.setAttribute('aria-expanded',String(!observation.wrap.hidden));
       const commercialRow=el('div','commercialization-row');commercialRow.append(commercializationWrap,addObservation);fields.append(commercialRow,observation.wrap);
       const itemTotal=el('div','item-total'),total=el('strong','','—');itemTotal.append(el('span','','Total'),total);fields.append(itemTotal);
       state.fields.set(item.id,{brand,quantity,unitId,unitPrice,observation,fields,total,commercialization:{wrap:commercializationWrap,input:choice.trigger,error:commercializationError},priceLabel:unitPrice.label,refreshPriceUnit,refreshPackaging});
@@ -337,7 +350,7 @@
         if(data.offers.some(other=>other!==value&&other.brand&&other.brand.trim().toLocaleLowerCase('pt-BR')===value.brand.trim().toLocaleLowerCase('pt-BR'))&&!errors.some(e=>e.field==='brand'))errors.push({itemId:item.id,offerId:value.offerId,field:'brand',message:'Esta marca já foi informada. Edite a oferta existente.'});
         if(errors.length){showErrors(errors);return;}commit();
       }),back=button('Voltar','secondary',()=>dialog.close());actions.append(save,back);dialog.append(title,body,actions);document.body.append(dialog);
-      const fit=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';};
+      const fit=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';if(document.activeElement?.closest('.observation-field'))requestAnimationFrame(()=>document.activeElement?.scrollIntoView({block:'center',behavior:'auto'}));};
       dialog.addEventListener('close',()=>{
         closeUnitChoice();if(!committed){state.values[item.id]=original;state.dirty=priorDirty;state.pending=priorPending;saveDraft();}
         window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);dialog.remove();state.offerDialog=null;renderForm();

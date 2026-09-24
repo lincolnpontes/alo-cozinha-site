@@ -180,3 +180,6 @@ h1{font-size:24px;line-height:1.25;margin:5px 0 14px;overflow-wrap:anywhere}
 .quotation-heading h2{font-size:32px;line-height:1.15}
 .unavailable-panel{max-width:560px;margin:38px auto;padding:28px 24px;text-align:center;border-top:4px solid var(--pedido);box-shadow:0 4px 18px #2447630b}
 .unavailable-panel h1{font-size:26px;color:#284e70}.unavailable-panel .state-mark{margin:0 auto;background:#eaf2fa;color:var(--pedido)}.unavailable-panel p{margin:12px auto 4px;max-width:390px;line-height:1.6}
+
+/* v2.1.97 */
+.quotation-heading h2{font-size:30px}.offer-edit-dialog .observation-field{scroll-margin-block:60px}.receipt-panel .edit-submitted-proposal{margin:12px auto 8px;max-width:340px}.unavailable-panel h1{font-size:24px}.unavailable-panel{border-top:0;border:1px solid #d6e2eb;border-radius:12px;background:#fff;padding:30px 24px}
