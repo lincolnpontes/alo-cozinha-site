@@ -35,7 +35,7 @@
     return measures.filter(measure=>measure.base===base);
   }
   function offerUnit(item,answer){
-    if(answer?.unit?.id===answer.unitId)return answer.unit;
+    if(answer?.unit&&answer.unit.id===answer.unitId)return answer.unit;
     if(answer?.unitId!=='__custom__')return item.units.find(unit=>unit.id===answer?.unitId);
     const custom=answer.customUnit,measure=customMeasures(item).find(value=>value.id===custom?.measure),amount=decimal(custom?.amount);
     if(!custom||!measure||!(amount>0))return null;
@@ -155,6 +155,7 @@
   function auctionMinimum(q,itemId){
     if(!q?.auctionEnabled||q.status!=="answered")return null;
     const item=q.items?.find(item=>item.id===itemId),answer=q.answers?.find(answer=>answer.itemId===itemId&&!answer.excluded&&!answer.unavailable),unit=item&&offerUnit(item,answer);
+    if(!answer)return null;
     const label=clean(unit?.id).toLowerCase().replace(/\s+/g,' ');
     return (q.auctionMinima||[]).find(entry=>entry.itemId===itemId&&typeof entry.unitPrice==="number"&&Number.isFinite(entry.unitPrice)&&entry.unitPrice>0&&
       (["kg","L","un"].includes(entry.unit)||!unit?.base&&!unit?.factor&&label&&label!=='__custom__'&&!/^(?:caixa|cx|fardo|fd|saco|sc|pacote|pct|embalagem|lata|balde|pote|garrafa)s?\.?$/i.test(label)&&entry.unit===label&&entry.comparisonKey==='label:'+label))||null;

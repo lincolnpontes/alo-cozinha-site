@@ -113,12 +113,14 @@
       return panel;
     }
     function quotationDeadline(quotation){const node=el('p','deadline quotation-deadline');node.append(icon('clock'),el('span','',`Responder até ${date(quotation.expiresAt)}`));return node;}
+    function exclusionNotice(answer){return notice(`${answer.brand||'Oferta'}: oferta excluída pelo restaurante.${answer.excludedReason?' Motivo: '+answer.excludedReason:''}`,'excluded-offer');}
     function answerList(quotation,answers){
       const list=el('ul','answer-list');
       for(const item of quotation.items){
-        const alternatives=answers.filter(value=>value.itemId===item.id&&!value.excluded);if(!alternatives.length)continue;
+        const alternatives=answers.filter(value=>value.itemId===item.id);if(!alternatives.length)continue;
         const row=el('li','answer-item');row.append(el('strong','answer-product-name',`${quotation.items.indexOf(item)+1}. ${item.name}`));
         for(const answer of alternatives){
+          if(answer.excluded){row.append(exclusionNotice(answer));continue;}
           const offer=el('div','answer-alternative');
           if(answer.unavailable)offer.append(el('p','','Indisponível'));
           else{
@@ -130,7 +132,7 @@
           }
           row.append(offer);
         }
-        if(quotation.auctionEnabled&&quotation.status==='answered'&&alternatives.some(answer=>!answer.unavailable))row.append(auctionPrice(item.id));
+        if(quotation.auctionEnabled&&quotation.status==='answered'&&alternatives.some(answer=>!answer.unavailable&&!answer.excluded))row.append(auctionPrice(item.id));
         list.append(row);
       }
       return list;
@@ -323,7 +325,7 @@
       commercializationLabel.htmlFor=choice.trigger.id='commercialization-'+index;commercializationWrap.append(commercializationLabel,choice.container,commercializationError);
       function refreshPackaging(){const form=value.commercialization;choice.copy.textContent=!form?'Selecionar':form.kind==='unit'?form.label:`${form.label} com ${number(form.amount)} ${form.measure}`;choice.trigger.value=form?.kind||'';choice.menu.querySelectorAll('[role=option]').forEach(node=>node.setAttribute('aria-selected',String(node.dataset.value===form?.kind)));}
       const observation=field(item,index,'observation','Observação');observation.wrap.classList.add('observation-field');observation.input.placeholder='Detalhes desta oferta';observation.wrap.hidden=!value.observation;
-      const addObservation=button(value.observation?'Observação':'Adicionar observação','observation-toggle',()=>{observation.wrap.hidden=!observation.wrap.hidden;addObservation.setAttribute('aria-expanded',String(!observation.wrap.hidden));if(!observation.wrap.hidden){observation.input.focus({preventScroll:true});requestAnimationFrame(()=>observation.wrap.scrollIntoView({block:'center',behavior:'smooth'}));}});addObservation.setAttribute('aria-expanded',String(!observation.wrap.hidden));
+      const addObservation=button(value.observation?'Observação':'Adicionar observação','observation-toggle',()=>{observation.wrap.hidden=!observation.wrap.hidden;addObservation.setAttribute('aria-expanded',String(!observation.wrap.hidden));if(!observation.wrap.hidden){observation.input.focus({preventScroll:true});state.offerDialog?.positionObservation?.();}});addObservation.setAttribute('aria-expanded',String(!observation.wrap.hidden));
       const commercialRow=el('div','commercialization-row');commercialRow.append(commercializationWrap,addObservation);fields.append(commercialRow,observation.wrap);
       const itemTotal=el('div','item-total'),total=el('strong','','—');itemTotal.append(el('span','','Total'),total);fields.append(itemTotal);
       state.fields.set(item.id,{brand,quantity,unitId,unitPrice,observation,fields,total,commercialization:{wrap:commercializationWrap,input:choice.trigger,error:commercializationError},priceLabel:unitPrice.label,refreshPriceUnit,refreshPackaging});
@@ -350,10 +352,12 @@
         if(data.offers.some(other=>other!==value&&other.brand&&other.brand.trim().toLocaleLowerCase('pt-BR')===value.brand.trim().toLocaleLowerCase('pt-BR'))&&!errors.some(e=>e.field==='brand'))errors.push({itemId:item.id,offerId:value.offerId,field:'brand',message:'Esta marca já foi informada. Edite a oferta existente.'});
         if(errors.length){showErrors(errors);return;}commit();
       }),back=button('Voltar','secondary',()=>dialog.close());actions.append(save,back);dialog.append(title,body,actions);document.body.append(dialog);
-      const fit=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';if(document.activeElement?.closest('.observation-field'))requestAnimationFrame(()=>document.activeElement?.scrollIntoView({block:'center',behavior:'auto'}));};
+      let observationFrame;
+      dialog.positionObservation=()=>{cancelAnimationFrame(observationFrame);observationFrame=requestAnimationFrame(()=>{const field=body.querySelector('.observation-field:not([hidden])');if(!field)return;const rect=field.getBoundingClientRect(),area=body.getBoundingClientRect();body.scrollTo({top:Math.max(0,body.scrollTop+rect.top-area.top-Math.max(16,(area.height-rect.height)/2)),behavior:'auto'});});};
+      const fit=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';if(document.activeElement?.closest('.observation-field'))dialog.positionObservation();};
       dialog.addEventListener('close',()=>{
         closeUnitChoice();if(!committed){state.values[item.id]=original;state.dirty=priorDirty;state.pending=priorPending;saveDraft();}
-        window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);dialog.remove();state.offerDialog=null;renderForm();
+        cancelAnimationFrame(observationFrame);window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);dialog.remove();state.offerDialog=null;renderForm();
         document.getElementById('item-'+index)?.focus({preventScroll:true});global.scrollTo?.({top:priorScroll,behavior:'auto'});
       });
       dialog.showModal();fit();window.visualViewport?.addEventListener('resize',fit);window.visualViewport?.addEventListener('scroll',fit);updateTotals();title.focus({preventScroll:true});
@@ -362,6 +366,7 @@
       const data=state.values[item.id],card=el('section','item-card compact-quotation-item'),head=el('div','item-header'),name=el('h3','',`${index+1}. ${item.name}`);
       name.id='item-'+index;name.tabIndex=-1;card.setAttribute('aria-labelledby',name.id);
       const requestedUnit=item.units.find(unit=>unit.id===item.unitId)||{label:item.unitId},requested=el('p','requested',`${number(item.quantity)} × ${requestedUnit.label}`);head.append(name,requested);card.append(head);
+      for(const excluded of data.excludedOffers||[])card.append(exclusionNotice(excluded));
       const filled=data.offers.filter(v=>!v.excluded&&(v.brand||Core.decimal(v.unitPrice)>0||v.commercialization));
       const complete=!data.unavailable&&filled.some(v=>v.brand&&Core.decimal(v.unitPrice)>0&&v.commercialization);
       if(!data.unavailable&&filled.length){
@@ -400,7 +405,7 @@
     function review(){
       if(state.busy)return;
       closeUnitChoice();
-      const {answers,errors}=Core.buildAnswers(state.quotation,state.values);if(errors.length){showErrors(errors);return;}
+      const {answers,errors}=Core.buildAnswers(state.quotation,state.values);if(errors.length){const count=new Set(errors.map(error=>error.itemId)).size;formNotice.replaceChildren(notice(`Falta preencher ${count===1?'um item':count+' itens'}. Informe o preço ou marque como indisponível antes de revisar.`,'error'));formNotice.scrollIntoView({block:'center',behavior:'smooth'});return;}
       const signature=Core.signature(state.quotation.revision,answers);
       if(state.pending?.signature!==signature)state.pending={operationId:operationId(),expectedRevision:state.quotation.revision,answers,signature};
       saveDraft();state.dialog?.remove();
