@@ -353,7 +353,7 @@
         if(errors.length){showErrors(errors);return;}commit();
       }),back=button('Voltar','secondary',()=>dialog.close());actions.append(save,back);dialog.append(title,body,actions);document.body.append(dialog);
       let observationFrame;
-      dialog.positionObservation=()=>{cancelAnimationFrame(observationFrame);observationFrame=requestAnimationFrame(()=>{const field=body.querySelector('.observation-field:not([hidden])');if(!field)return;const rect=field.getBoundingClientRect(),area=body.getBoundingClientRect();body.scrollTo({top:Math.max(0,body.scrollTop+rect.top-area.top-Math.max(16,(area.height-rect.height)/2)),behavior:'auto'});});};
+      dialog.positionObservation=()=>{cancelAnimationFrame(observationFrame);observationFrame=requestAnimationFrame(()=>{const field=body.querySelector('.observation-field:not([hidden])');if(!field)return;const rect=field.getBoundingClientRect(),area=dialog.getBoundingClientRect();dialog.scrollTo({top:Math.max(0,dialog.scrollTop+rect.top-area.top-Math.max(16,(area.height-rect.height)/2)),behavior:'auto'});});};
       const fit=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';if(document.activeElement?.closest('.observation-field'))dialog.positionObservation();};
       dialog.addEventListener('close',()=>{
         closeUnitChoice();if(!committed){state.values[item.id]=original;state.dirty=priorDirty;state.pending=priorPending;saveDraft();}
@@ -390,10 +390,10 @@
       closeUnitChoice();
       state.fields.clear();state.offerValues.clear();state.itemSaveButtons.clear();const form=el('form');form.noValidate=true;form.addEventListener('submit',event=>{event.preventDefault();review();});
       const heading=el('div','section-heading quotation-heading');progress=el('span','progress');progress.setAttribute('role','status');heading.append(el('h2','','Cotação'),quotationDeadline(state.quotation),progress);form.append(heading);
-      formNotice=el('div');if(message)formNotice.append(notice(message,'warning'));form.append(formNotice);
+      formNotice=el('div','review-feedback');if(message)formNotice.append(notice(message,'warning'));
       const auction=auctionPanel();if(auction)form.append(auction);
       const list=el('div','item-list');state.quotation.items.forEach((item,index)=>list.append(itemCard(item,index)));form.append(list);
-      const actions=el('div','proposal-actions'),summary=el('div','proposal-summary');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));actions.append(summary,submit);form.append(actions);
+      const actions=el('div','proposal-actions'),summary=el('div','proposal-summary');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));actions.append(summary,submit,formNotice);form.append(actions);
       root.replaceChildren(header(state.quotation),form);root.setAttribute('aria-busy','false');updateTotals();
     }
     function showErrors(errors){
