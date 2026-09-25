@@ -66,7 +66,7 @@
     function auctionPanel(){
       const q=state.quotation;if(!q.auctionEnabled||q.status==='ordered'){stopAuction();return null;}
       const panel=el('section','auction-panel');
-      if(q.status!=='answered')panel.append(el('p','','Envie sua proposta para consultar o menor preço dos itens disponíveis que você ofertar.'));
+      if(q.status!=='answered')panel.append(el('p','','Envie sua proposta para poder ver o menor preço ofertado pelos demais fornecedores. Você pode editar sua cotação posteriormente.'));
       if(q.status==='answered'){
         const status=el('p','auction-status',auctionClosed?'Cotação encerrada.':'Atualização automática a cada minuto nesta página.');status.dataset.auctionStatus='';status.setAttribute('role','status');
         const refresh=button('Atualizar preços','secondary',refreshAuction);refresh.dataset.auctionRefresh='';refresh.disabled=auctionClosed;panel.append(status,refresh);
@@ -118,7 +118,7 @@
       const list=el('ul','answer-list');
       for(const item of quotation.items){
         const alternatives=answers.filter(value=>value.itemId===item.id);if(!alternatives.length)continue;
-        const row=el('li','answer-item');row.append(el('strong','answer-product-name',`${quotation.items.indexOf(item)+1}. ${item.name}`));
+        const row=el('li','answer-item'),heading=el('div','answer-product-heading');heading.append(el('strong','answer-product-name',`${quotation.items.indexOf(item)+1}. ${item.name}`),el('span','answer-requested-quantity',`${number(item.quantity)} ${item.units?.find(unit=>unit.id===item.unitId)?.label||item.unitId}`));row.append(heading);
         for(const answer of alternatives){
           if(answer.excluded){row.append(exclusionNotice(answer));continue;}
           const offer=el('div','answer-alternative');
@@ -126,7 +126,7 @@
           else{
             const brandLine=el('p','answer-brand-line');if(answer.brand)brandLine.append(el('strong','answer-brand',answer.brand));
             if(answer.commercialization){const c=answer.commercialization;brandLine.append(el('span','answer-packaging',(answer.brand?' – ':'')+(c.kind==='unit'?c.label:`${c.label} com ${number(c.amount)} ${c.measure}`)));}offer.append(brandLine);
-            offer.append(el('p','answer-price',`${number(answer.quantity)} ${Core.offerUnitLabel(item,answer)} · ${currency(answer.unitPrice,4)} por ${Core.priceUnitLabel(item,answer)} · Total ${currency(Core.offerTotal(item,answer))}`));
+            offer.append(el('p','answer-price',`${currency(answer.unitPrice,4)} por ${Core.priceUnitLabel(item,answer)} · Total ${currency(Core.offerTotal(item,answer))}`));
             if(answer.observation)offer.append(el('p','answer-observation',answer.observation));
           }
           row.append(offer);
