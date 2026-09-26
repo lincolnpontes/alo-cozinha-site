@@ -126,7 +126,7 @@
           else{
             const brandLine=el('p','answer-brand-line');if(answer.brand)brandLine.append(el('strong','answer-brand',answer.brand));
             if(answer.commercialization){const c=answer.commercialization;brandLine.append(el('span','answer-packaging',(answer.brand?' – ':'')+(c.kind==='unit'?c.label:`${c.label} com ${number(c.amount)} ${c.measure}`)));}offer.append(brandLine);
-            offer.append(el('p','answer-price',`${currency(answer.unitPrice,4)} por ${Core.priceUnitLabel(item,answer)} · Total ${currency(Core.offerTotal(item,answer))}`));
+            const priceLine=el('p','answer-price',`${currency(answer.unitPrice,4)} por ${Core.priceUnitLabel(item,answer)} · `);priceLine.append(el('strong','',`Total: ${currency(Core.offerTotal(item,answer))}`));offer.append(priceLine);
             if(answer.observation)offer.append(el('p','answer-observation',answer.observation));
           }
           row.append(offer);
@@ -385,6 +385,12 @@
       }else if(data.offers.length<5)actions.append(button('Adicionar nova marca','add-brand-offer',()=>editOffer(item,index,null,true)));
       card.append(actions);if(state.quotation.auctionEnabled&&state.quotation.status==='answered')card.append(auctionPrice(item.id));return card;
     }
+    function cancelEditing(){
+      if(state.busy)return;
+      state.values=Core.draftForQuotation(state.quotation);clearDraft();state.editing=false;
+      state.dialog?.close();state.dialog?.remove();state.dialog=null;
+      receipt();
+    }
     function renderForm(message=''){
       closeUnitChoice();
       state.fields.clear();state.offerValues.clear();state.itemSaveButtons.clear();const form=el('form');form.noValidate=true;form.addEventListener('submit',event=>{event.preventDefault();review();});
@@ -392,7 +398,7 @@
       formNotice=el('div','review-feedback');if(message)formNotice.append(notice(message,'warning'));
       const auction=auctionPanel();if(auction)form.append(auction);
       const list=el('div','item-list');state.quotation.items.forEach((item,index)=>list.append(itemCard(item,index)));form.append(list);
-      const actions=el('div','proposal-actions'),summary=el('div','proposal-summary');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));actions.append(summary,submit,formNotice);form.append(actions);
+      const actions=el('div','proposal-actions'),summary=el('div','proposal-summary');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));actions.append(summary,submit,formNotice);if(state.editing)actions.append(button('Cancelar edição','secondary cancel-editing',cancelEditing));form.append(actions);
       root.replaceChildren(header(state.quotation),form);root.setAttribute('aria-busy','false');updateTotals();
     }
     function showErrors(errors){
@@ -439,6 +445,7 @@
         const accepted=state.pending&&state.pending.expectedRevision!==state.quotation.revision&&Core.signature(0,state.pending.answers)===Core.signature(0,currentAnswers);
         if(state.quotation.status==='ordered'||accepted||state.quotation.status==='answered'&&!state.dirty){clearDraft();receipt();return;}
         if(saved&&saved.revision!==state.quotation.revision){state.pending=null;message=errorText('quotation_conflict');}
+        state.editing=state.quotation.status==='answered';
         renderForm(message);
       }catch(error){fatal(error.code||error.message,error.code!=='quotation_unavailable');}finally{state.loading=false;}
     }
