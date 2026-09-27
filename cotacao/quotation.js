@@ -151,11 +151,12 @@
     function receipt(){
       const q=state.quotation,closed=q.status==='ordered',panel=el('section','state-panel'),mark=el('div',closed?'state-mark':'state-mark success');mark.append(icon(closed?'clock':'check'));
       const heading=el('h1','',closed?'Cotação encerrada':'Proposta enviada');heading.tabIndex=-1;
-      panel.append(mark,heading,el('p','',closed?'O restaurante encerrou esta cotação. Não é mais possível enviar ou alterar a proposta.':`${q.restaurantName||'O restaurante'} recebeu sua proposta.`));
-      if(q.submittedAt)panel.append(el('p','',`Enviada em ${date(q.submittedAt)}`));
+      const titleRow=el('div','receipt-title-row'),titleCopy=el('div','receipt-title-copy');titleCopy.append(heading);
+      if(q.submittedAt)titleCopy.append(el('p','receipt-date',date(q.submittedAt)));
+      titleRow.append(mark,titleCopy);panel.append(titleRow,el('p','receipt-recipient',closed?'O restaurante encerrou esta cotação. Não é mais possível enviar ou alterar a proposta.':`${q.restaurantName||q.legalName||'O restaurante'} recebeu sua proposta.`));
       if(!closed){const edit=button('Editar proposta','primary edit-submitted-proposal',editSubmittedProposal);edit.dataset.editProposal='';panel.append(edit);}
       const auction=auctionPanel();if(auction)panel.append(auction);
-      if((q.answers||[]).length){panel.append(el('h2','submitted-heading','Sua resposta'),answerList(q,q.answers));const totals=Core.summary(q.answers,q.items),line=el('div','review-total',hasAlternatives(q.answers)?'Menor total por item':'Total ofertado');line.append(el('strong','',currency(totals.total)));panel.append(line);}
+      if((q.answers||[]).length){panel.append(el('h2','submitted-heading','Proposta'),answerList(q,q.answers));const totals=Core.summary(q.answers,q.items),line=el('div','review-total',hasAlternatives(q.answers)?'Menor total por item':'Total ofertado');line.append(el('strong','',currency(totals.total)));panel.append(line);}
 
       root.replaceChildren(header(q),panel);panel.classList.add('receipt-panel');root.setAttribute('aria-busy','false');heading.focus({preventScroll:true});global.scrollTo?.({top:0,behavior:'auto'});
     }
