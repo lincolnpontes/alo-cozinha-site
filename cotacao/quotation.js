@@ -177,7 +177,7 @@
       if(field==='unitId'){const resolved=Core.offerUnit(sourceFor(itemId),valueFor(itemId));if(!resolved?.factor)valueFor(itemId).priceBasis='package';}
       if(['unitId','priceBasis'].includes(field)||(['customAmount','customMeasure'].includes(field)&&valueFor(itemId).priceBasis!=='base')){valueFor(itemId).unitPrice='';refs.unitPrice.input.value='';}
       for(const ref of Object.values(refs)){if(ref?.input){ref.input.removeAttribute('aria-invalid');ref.error.hidden=true;}}
-
+      if(state.offerDialog?.saveError){state.offerDialog.saveError.hidden=true;state.offerDialog.saveError.textContent='';}
       refs.refreshPackaging?.();
       updateTotals();saveDraft();
     }
@@ -236,20 +236,21 @@
     function editPackaging(item,index,kind){
       closeUnitChoice();const value=valueFor(item.id),old=value.commercialization||{},editing=old.kind===kind,source=sourceFor(item.id),available=Core.customMeasures(source),requested=source.units.find(unit=>unit.id===source.unitId);
       const allowed=available.length?available:[{id:requested.id,label:requested.label}];
-      const label=kind==='other'?(editing?old.label:''):kind==='box'?'Caixa':'Fardo',dialog=el('dialog','review-dialog packaging-dialog'),title=el('h2','',kind==='other'?'Qual a composição da embalagem?':kind==='box'?'Qual a composição da caixa?':'Qual a composição do fardo?'),body=el('div','packaging-body'),actions=el('div','review-actions'),error=el('p','field-error');
+      const label=kind==='other'?(editing?old.label:''):kind==='box'?'Caixa':'Fardo',dialog=el('dialog','review-dialog packaging-dialog'),title=el('h2','',kind==='other'?'Qual a composição da embalagem?':kind==='box'?'Qual a composição da caixa?':'Qual a composição do fardo?'),body=el('div','packaging-body'),actions=el('div','review-actions'),error=el('p','dialog-save-error');
       title.id='packagingTitle';dialog.setAttribute('aria-labelledby',title.id);error.hidden=true;error.setAttribute('role','alert');
       let nameInput;if(kind==='other'){const wrap=el('div','field'),nameLabel=el('label','','Nome da embalagem');nameInput=el('input');nameInput.id='packagingName';nameLabel.htmlFor=nameInput.id;nameInput.maxLength=120;nameInput.value=label;wrap.append(nameLabel,nameInput);body.append(wrap);}
       const row=el('div','custom-content-row'),amountWrap=el('div','field'),amountLabel=el('label','','Qtde'),amount=el('input'),measureWrap=el('div','field'),measureLabel=el('label','','Subunidade');
       amount.id='packagingAmount';amount.type='text';amount.inputMode='decimal';amount.autocomplete='off';amount.maxLength=17;amountLabel.htmlFor=amount.id;amount.value=editing?Core.inputNumber(old.amount):'';amount.placeholder='Ex.: 15';amount.addEventListener('focus',()=>amount.select());amount.addEventListener('click',()=>amount.select());amount.addEventListener('input',()=>{amount.value=Core.quantityFromTyping(amount.value);});
       let measure=allowed.some(m=>m.id===old.measure)?old.measure:allowed[0]?.id;const choice=choiceMenu(item,index,'packMeasure','Subunidade',allowed,measure,id=>{measure=id;});choice.trigger.id='packagingMeasure';measureLabel.htmlFor=choice.trigger.id;
-      amountWrap.append(amountLabel,amount);measureWrap.append(measureLabel,choice.container);row.append(amountWrap,measureWrap);body.append(row,error);
+      amountWrap.append(amountLabel,amount);measureWrap.append(measureLabel,choice.container);row.append(amountWrap,measureWrap);body.append(row);
       const cancel=button('Cancelar','secondary',()=>dialog.close()),save=button('Salvar','primary',()=>{
         const name=nameInput?nameInput.value.trim():label,count=Core.decimal(amount.value);
-        if(!name||/[\u0000-\u001f]/.test(name)){error.textContent='Informe o nome da embalagem.';error.hidden=false;nameInput?.focus();return;}
-        if(!(count>0)||count>1e9||!allowed.some(m=>m.id===measure)){error.textContent='Informe uma quantidade maior que zero e a medida.';error.hidden=false;amount.focus();return;}
+        if(!name||/[\u0000-\u001f]/.test(name)){error.textContent='Informe o nome da embalagem.';error.hidden=false;nameInput?.setAttribute('aria-invalid','true');nameInput?.focus();return;}
+        if(!(count>0)||count>1e9||!allowed.some(m=>m.id===measure)){error.textContent='Informe uma quantidade maior que zero e a medida.';error.hidden=false;amount.setAttribute('aria-invalid','true');amount.focus();return;}
         changed(item.id,'commercialization',{kind,label:name,amount:count,measure});dialog.close();
       });
-      amount.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save.click();}});actions.append(save,cancel);dialog.append(title,body,actions);document.body.append(dialog);
+      for(const input of [nameInput,amount].filter(Boolean))input.addEventListener('input',()=>{input.removeAttribute('aria-invalid');error.hidden=true;});
+      amount.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save.click();}});actions.append(error,save,cancel);dialog.append(title,body,actions);document.body.append(dialog);
       dialog.addEventListener('close',()=>{closeUnitChoice();dialog.remove();state.fields.get(item.id)?.commercialization.input.focus({preventScroll:true});});dialog.showModal();
       const fitDialog=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';if(document.activeElement?.closest('.observation-field'))requestAnimationFrame(()=>document.activeElement?.scrollIntoView({block:'center',behavior:'auto'}));};
       fitDialog();window.visualViewport?.addEventListener('resize',fitDialog);window.visualViewport?.addEventListener('scroll',fitDialog);
@@ -293,15 +294,15 @@
         choice.trigger.value=value.brand;choice.menu.querySelectorAll('[role=option]').forEach(node=>node.setAttribute('aria-selected',String(node.dataset.value===(value.brandMode==='other'?'other':'brand-'+brands.findIndex(name=>key(name)===key(value.brand))))));
       }
       function openOtherBrand(){
-        const dialog=el('dialog','review-dialog other-brand-dialog'),title=el('h2','','Outra marca'),wrap=el('div','field'),label=el('label','','Marca'),input=el('input'),error=el('p','field-error'),actions=el('div','review-actions');
+        const dialog=el('dialog','review-dialog other-brand-dialog'),title=el('h2','','Outra marca'),wrap=el('div','field'),label=el('label','','Marca'),input=el('input'),error=el('p','dialog-save-error'),actions=el('div','review-actions');
         title.id='otherBrandTitle';dialog.setAttribute('aria-labelledby',title.id);input.id='otherBrandName';label.htmlFor=input.id;input.maxLength=120;input.autocomplete='off';input.value=value.brandMode==='other'?value.brand:'';error.hidden=true;error.setAttribute('role','alert');
         const cancel=button('Cancelar','secondary',()=>dialog.close()),save=button('Salvar','primary',()=>{
-          const name=input.value.trim();if(!name){error.textContent='Informe a marca.';error.hidden=false;input.focus();return;}
-          if(rejected.some(brand=>key(brand)===key(name))){error.textContent='Esta marca não é aceita pelo restaurante.';error.hidden=false;input.focus();return;}
-          if(/[\u0000-\u001f]/.test(name)){error.textContent='Confira o nome da marca.';error.hidden=false;return;}
+          const name=input.value.trim();if(!name){error.textContent='Informe a marca.';error.hidden=false;input.setAttribute('aria-invalid','true');input.focus();return;}
+          if(rejected.some(brand=>key(brand)===key(name))){error.textContent='Esta marca não é aceita pelo restaurante.';error.hidden=false;input.setAttribute('aria-invalid','true');input.focus();return;}
+          if(/[\u0000-\u001f]/.test(name)){error.textContent='Confira o nome da marca.';error.hidden=false;input.setAttribute('aria-invalid','true');return;}
           setBrand(name);dialog.close();
         });
-        input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();save.click();}});wrap.append(label,input,error);actions.append(save,cancel);dialog.append(title,wrap,actions);document.body.append(dialog);
+        input.addEventListener('input',()=>{input.removeAttribute('aria-invalid');error.hidden=true;});input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();save.click();}});wrap.append(label,input);actions.append(error,save,cancel);dialog.append(title,wrap,actions);document.body.append(dialog);
         dialog.addEventListener('close',()=>{dialog.remove();choice.trigger.focus({preventScroll:true});});dialog.showModal();input.focus({preventScroll:true});
       }
       ref.input.remove();ref.input=choice.trigger;choice.trigger.id=`offer-${index}-brand-choice`;ref.label.htmlFor=choice.trigger.id;choice.trigger.setAttribute('aria-describedby',ref.error.id);ref.wrap.insertBefore(choice.container,ref.error);refreshBrand();return ref;
@@ -324,12 +325,31 @@
       });
       commercializationLabel.htmlFor=choice.trigger.id='commercialization-'+index;commercializationWrap.append(commercializationLabel,choice.container,commercializationError);
       function refreshPackaging(){const form=value.commercialization;choice.copy.textContent=!form?'Selecionar':form.kind==='unit'?form.label:`${form.label} com ${number(form.amount)} ${form.measure}`;choice.trigger.value=form?.kind||'';choice.menu.querySelectorAll('[role=option]').forEach(node=>node.setAttribute('aria-selected',String(node.dataset.value===form?.kind)));}
-      const observation=field(item,index,'observation','Observação');observation.wrap.classList.add('observation-field');observation.input.placeholder='Detalhes desta oferta';observation.wrap.hidden=!value.observation;
-      const addObservation=button(value.observation?'Observação':'Adicionar observação','observation-toggle',()=>{observation.wrap.hidden=!observation.wrap.hidden;addObservation.setAttribute('aria-expanded',String(!observation.wrap.hidden));if(!observation.wrap.hidden){observation.input.focus({preventScroll:true});state.offerDialog?.positionObservation?.();}});addObservation.setAttribute('aria-expanded',String(!observation.wrap.hidden));
-      const commercialRow=el('div','commercialization-row');commercialRow.append(commercializationWrap,addObservation);fields.append(commercialRow,observation.wrap);
+      const observationText=el('p','offer-observation-summary');
+      const addObservation=button('Adicionar observação','observation-toggle',()=>editObservation(item,index,addObservation,refreshObservation));addObservation.setAttribute('aria-haspopup','dialog');
+      function refreshObservation(){observationText.textContent=value.observation||'';observationText.hidden=!value.observation;addObservation.textContent=value.observation?'Editar observação':'Adicionar observação';}
+      refreshObservation();
+      const commercialRow=el('div','commercialization-row');commercialRow.append(commercializationWrap,addObservation);fields.append(commercialRow,observationText);
+      const observation={wrap:commercialRow,input:addObservation,error:el('p','field-error')};observation.error.hidden=true;
       const itemTotal=el('div','item-total'),total=el('strong','','—');itemTotal.append(el('span','','Total'),total);fields.append(itemTotal);
       state.fields.set(item.id,{brand,quantity,unitId,unitPrice,observation,fields,total,commercialization:{wrap:commercializationWrap,input:choice.trigger,error:commercializationError},priceLabel:unitPrice.label,refreshPriceUnit,refreshPackaging});
       return fields;
+    }
+    function editObservation(item,index,trigger,refresh){
+      closeUnitChoice();const parent=state.offerDialog,priorScroll=parent?.scrollTop||0,value=valueFor(item.id);
+      const dialog=el('dialog','review-dialog observation-dialog'),title=el('h2','','Observação'),wrap=el('div','field'),label=el('label','','Observação da oferta'),input=el('input'),actions=el('div','review-actions'),error=el('p','dialog-save-error');
+      title.id='observationTitle';dialog.setAttribute('aria-labelledby',title.id);input.id='observationText';input.type='text';input.maxLength=500;input.autocomplete='off';input.value=value.observation||'';input.placeholder='Detalhes desta oferta';label.htmlFor=input.id;
+      error.id='observationSaveError';error.hidden=true;error.setAttribute('role','alert');input.setAttribute('aria-describedby',error.id);
+      const cancel=button('Cancelar','secondary',()=>dialog.close()),save=button('Salvar','primary',()=>{
+        if(disposed||state.busy||state.loading||state.offerDialog!==parent||!parent?.open){dialog.close();return;}
+        const text=input.value.trim();if(text.length>500||/[\u0000-\u001f\u007f]/.test(text)){input.setAttribute('aria-invalid','true');error.textContent='Use até 500 caracteres em uma linha.';error.hidden=false;return;}
+        changed(item.id,'observation',text);refresh();dialog.close();
+      });
+      input.addEventListener('input',()=>{input.removeAttribute('aria-invalid');error.hidden=true;});input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();save.click();}});
+      wrap.append(label,input);actions.append(error,save,cancel);dialog.append(title,wrap,actions);document.body.append(dialog);
+      const fit=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';};
+      dialog.addEventListener('close',()=>{window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);dialog.remove();if(parent?.isConnected)parent.scrollTop=priorScroll;if(trigger.isConnected)trigger.focus({preventScroll:true});});
+      dialog.showModal();fit();window.visualViewport?.addEventListener('resize',fit);window.visualViewport?.addEventListener('scroll',fit);input.focus({preventScroll:true});
     }
     function editOffer(item,index,offerId,adding=false){
       if(state.offerDialog?.open)return;
@@ -346,12 +366,12 @@
       let committed=false;
       function commit(){committed=true;state.dirty=true;state.pending=null;saveDraft();dialog.close();}
       dialog.removeOffer=()=>{data.offers=data.offers.filter(v=>v!==value);commit();};
-      const actions=el('div','offer-edit-actions'),save=button('Salvar','primary',()=>{
+      const actions=el('div','offer-edit-actions'),saveError=el('p','offer-save-error'),save=button('Salvar','primary',()=>{
         const built=Core.buildAnswers({...state.quotation,items:[item]},{[item.id]:data});
         const errors=built.errors.filter(error=>error.offerId===value.offerId);
         if(data.offers.some(other=>other!==value&&other.brand&&other.brand.trim().toLocaleLowerCase('pt-BR')===value.brand.trim().toLocaleLowerCase('pt-BR'))&&!errors.some(e=>e.field==='brand'))errors.push({itemId:item.id,offerId:value.offerId,field:'brand',message:'Esta marca já foi informada. Edite a oferta existente.'});
         if(errors.length){showErrors(errors);return;}commit();
-      }),back=button('Voltar','secondary',()=>dialog.close());actions.append(save,back);dialog.append(title,body,actions);document.body.append(dialog);
+      }),back=button('Voltar','secondary',()=>dialog.close());saveError.id='offerSaveError';saveError.hidden=true;saveError.tabIndex=-1;saveError.setAttribute('role','alert');dialog.saveError=saveError;actions.append(saveError,save,back);dialog.append(title,body,actions);document.body.append(dialog);
       let observationFrame;
       dialog.positionObservation=()=>{cancelAnimationFrame(observationFrame);observationFrame=requestAnimationFrame(()=>{const field=body.querySelector('.observation-field:not([hidden])');if(!field)return;const rect=field.getBoundingClientRect(),area=dialog.getBoundingClientRect();dialog.scrollTo({top:Math.max(0,dialog.scrollTop+rect.top-area.top-Math.max(16,(area.height-rect.height)/2)),behavior:'auto'});});};
       const fit=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';if(document.activeElement?.closest('.observation-field'))dialog.positionObservation();};
@@ -399,14 +419,14 @@
       formNotice=el('div','review-feedback');if(message)formNotice.append(notice(message,'warning'));
       const auction=auctionPanel();if(auction)form.append(auction);
       const list=el('div','item-list');state.quotation.items.forEach((item,index)=>list.append(itemCard(item,index)));form.append(list);
-      const actions=el('div','proposal-actions'),summary=el('div','proposal-summary');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));actions.append(summary,submit,formNotice);if(state.editing)actions.append(button('Cancelar edição','secondary cancel-editing',cancelEditing));form.append(actions);
+      const actions=el('div','proposal-actions'),summary=el('div','proposal-summary'),buttons=el('div','proposal-action-buttons');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));buttons.append(submit);if(state.editing){buttons.classList.add('is-editing');buttons.append(button('Cancelar edição','secondary cancel-editing',cancelEditing));}actions.append(summary,buttons,formNotice);form.append(actions);
       root.replaceChildren(header(state.quotation),form);root.setAttribute('aria-busy','false');updateTotals();
     }
     function showErrors(errors){
       const firstError=errors[0];
       if(firstError&&!state.offerDialog?.open){const index=state.quotation.items.findIndex(item=>item.id===firstError.itemId);if(index>=0)editOffer(state.quotation.items[index],index,firstError.offerId);}
-      for(const {itemId,offerId,field,message}of errors){const ref=state.fields.get(fieldKey(itemId,offerId))?.[field];if(!ref)continue;ref.input.setAttribute('aria-invalid','true');ref.error.textContent=message;ref.error.hidden=false;}
-      const first=errors[0],ref=state.fields.get(fieldKey(first?.itemId,first?.offerId))?.[first?.field];if(ref){ref.input.focus();ref.wrap.scrollIntoView({block:'center',behavior:'auto'});}
+      for(const {itemId,offerId,field}of errors){const ref=state.fields.get(fieldKey(itemId,offerId))?.[field];if(!ref)continue;ref.input.setAttribute('aria-invalid','true');ref.input.setAttribute('aria-describedby','offerSaveError');ref.error.hidden=true;}
+      const feedback=state.offerDialog?.saveError;if(feedback){feedback.textContent=[...new Set(errors.map(error=>error.message))].join(' ');feedback.hidden=false;feedback.focus({preventScroll:true});feedback.scrollIntoView({block:'nearest',behavior:'auto'});}
     }
     function review(){
       if(state.busy)return;

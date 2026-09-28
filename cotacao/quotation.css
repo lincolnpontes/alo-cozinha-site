@@ -191,6 +191,11 @@ h1{font-size:24px;line-height:1.25;margin:5px 0 14px;overflow-wrap:anywhere}
 .notice.excluded-offer{margin:8px 0;background:#fff3ed;border-color:#eccbbd;color:#86482e;font-size:14px}
 
 .review-feedback:empty{display:none}.review-feedback>.notice{margin:10px 0 0}.offer-edit-actions{position:static}
+.proposal-action-buttons{display:grid;gap:10px}.proposal-action-buttons.is-editing{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.proposal-action-buttons .button{min-width:0;padding-inline:8px;font-size:14px;line-height:1.25}
+.offer-observation-summary{margin:0;padding:8px 10px;border-left:3px solid #bfd2c6;background:#f5f8f6;border-radius:4px;color:#455c50;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
+.offer-save-error,.dialog-save-error{margin:0 0 2px;color:var(--perigo);font-size:13px;line-height:1.4;text-align:center;overflow-wrap:anywhere}.offer-save-error:focus{outline:2px solid var(--perigo);outline-offset:3px}
+.observation-toggle[aria-invalid="true"]{border-color:var(--perigo)}
+.observation-dialog{margin:0 auto;top:12px;bottom:auto;width:min(480px,calc(100vw - 24px));overflow:auto}.observation-dialog>.field{margin-top:14px}.observation-dialog input{width:100%;font-size:16px}.observation-dialog .review-actions{display:grid;gap:8px;margin-top:14px}
 
 /* Compact supplier header and review; actions remain in the document flow. */
 .proposal-actions{position:static;border-radius:var(--raio);box-shadow:none}.request-summary{padding:11px 14px}.request-summary .request-line:last-child{margin-bottom:0}.request-identity small{margin-top:2px}.quotation-heading{margin-top:13px;margin-bottom:8px}.auction-panel{padding:8px 11px;margin:8px 0}.auction-panel>p{margin:0}.auction-panel .auction-status:empty{display:none}.answer-list .answer-item{padding:11px 0}.answer-alternative{padding:5px 0}.answer-alternative .answer-brand-line{margin:3px 0}.answer-brand-line .answer-brand{display:inline}.answer-packaging{font-size:13px;color:#687078}.answer-alternative .answer-price{margin:3px 0;line-height:1.45;font-size:13px}.answer-alternative .answer-observation{margin:4px 0}
