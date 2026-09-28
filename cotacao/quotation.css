@@ -193,7 +193,7 @@ h1{font-size:24px;line-height:1.25;margin:5px 0 14px;overflow-wrap:anywhere}
 .review-feedback:empty{display:none}.review-feedback>.notice{margin:10px 0 0}.offer-edit-actions{position:static}
 .proposal-action-buttons{display:grid;gap:10px}.proposal-action-buttons.is-editing{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.proposal-action-buttons .button{min-width:0;padding-inline:8px;font-size:14px;line-height:1.25}
 .offer-observation-summary{margin:0;padding:8px 10px;border-left:3px solid #bfd2c6;background:#f5f8f6;border-radius:4px;color:#455c50;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
-.offer-save-error,.dialog-save-error{margin:0 0 2px;color:var(--perigo);font-size:13px;line-height:1.4;text-align:center;overflow-wrap:anywhere}.offer-save-error:focus{outline:2px solid var(--perigo);outline-offset:3px}
+.offer-save-error,.dialog-save-error{margin:0 0 2px;color:var(--perigo);font-size:13px;line-height:1.4;text-align:center;overflow-wrap:anywhere}.offer-save-error{white-space:pre-line}.offer-save-error:focus{outline:none}
 .observation-toggle[aria-invalid="true"]{border:2px solid var(--perigo)}
 .observation-dialog{margin:0 auto;top:12px;bottom:auto;width:min(480px,calc(100vw - 24px));overflow:auto}.observation-dialog>.field{margin-top:14px}.observation-dialog input{width:100%;font-size:16px}.observation-dialog .review-actions{display:grid;gap:8px;margin-top:14px}
 
@@ -202,3 +202,5 @@ h1{font-size:24px;line-height:1.25;margin:5px 0 14px;overflow-wrap:anywhere}
 .answer-product-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px}.answer-product-heading .answer-product-name{min-width:0}.answer-requested-quantity{white-space:nowrap;font-weight:700;color:#415963;font-size:13px}
 
 .button.secondary.cancel-editing{background:#fff0ef;color:#923f3b;border-color:#eac8c6}.button.secondary.cancel-editing:hover{background:#fbe3e1}.receipt-panel{padding:22px}.receipt-title-row{display:flex;align-items:center;gap:14px;margin-bottom:12px}.receipt-title-row .state-mark{width:44px;height:44px;flex:0 0 44px;margin:0}.receipt-title-row .state-mark svg{width:24px;height:24px}.receipt-title-copy h1{margin:0;font-size:25px}.receipt-title-copy .receipt-date{font-size:14px;margin:4px 0 0;color:#687780}.receipt-panel .receipt-recipient{margin:8px 0 12px}.receipt-panel .edit-submitted-proposal{margin:8px auto}.receipt-panel .submitted-heading{margin-top:20px}
+
+.money-input input[aria-invalid="true"]{border:0;outline:none;box-shadow:none}

@@ -426,7 +426,7 @@
       const firstError=errors[0];
       if(firstError&&!state.offerDialog?.open){const index=state.quotation.items.findIndex(item=>item.id===firstError.itemId);if(index>=0)editOffer(state.quotation.items[index],index,firstError.offerId);}
       for(const {itemId,offerId,field}of errors){const ref=state.fields.get(fieldKey(itemId,offerId))?.[field];if(!ref)continue;ref.input.setAttribute('aria-invalid','true');ref.input.setAttribute('aria-describedby','offerSaveError');ref.error.hidden=true;}
-      const feedback=state.offerDialog?.saveError;if(feedback){feedback.textContent=[...new Set(errors.map(error=>error.message))].join(' ');feedback.hidden=false;feedback.focus({preventScroll:true});feedback.scrollIntoView({block:'nearest',behavior:'auto'});}
+      const feedback=state.offerDialog?.saveError;if(feedback){feedback.textContent=[...new Set(errors.map(error=>error.message))].join('\n');feedback.hidden=false;feedback.focus({preventScroll:true});feedback.scrollIntoView({block:'nearest',behavior:'auto'});}
     }
     function review(){
       if(state.busy)return;
