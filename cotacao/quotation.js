@@ -419,7 +419,7 @@
       formNotice=el('div','review-feedback');if(message)formNotice.append(notice(message,'warning'));
       const auction=auctionPanel();if(auction)form.append(auction);
       const list=el('div','item-list');state.quotation.items.forEach((item,index)=>list.append(itemCard(item,index)));form.append(list);
-      const actions=el('div','proposal-actions'),summary=el('div','proposal-summary'),buttons=el('div','proposal-action-buttons');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));buttons.append(submit);if(state.editing){buttons.classList.add('is-editing');buttons.append(button('Cancelar edição','secondary cancel-editing',cancelEditing));}actions.append(summary,buttons,formNotice);form.append(actions);
+      const actions=el('div','proposal-actions'),summary=el('div','proposal-summary'),buttons=el('div','proposal-action-buttons');summaryCount=el('span');totalAmount=el('strong');summary.append(summaryCount,totalAmount);const submit=button('Revisar proposta','primary');submit.type='submit';submit.append(icon('arrow'));if(state.editing){buttons.classList.add('is-editing');buttons.append(button('Cancelar edição','secondary cancel-editing',cancelEditing));}buttons.append(submit);actions.append(summary,buttons,formNotice);form.append(actions);
       root.replaceChildren(header(state.quotation),form);root.setAttribute('aria-busy','false');updateTotals();
     }
     function showErrors(errors){
