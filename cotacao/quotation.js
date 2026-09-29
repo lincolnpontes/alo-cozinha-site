@@ -340,13 +340,13 @@
       const dialog=el('dialog','review-dialog observation-dialog'),title=el('h2','','Observação'),wrap=el('div','field'),label=el('label','','Observação da oferta'),input=el('input'),actions=el('div','review-actions'),error=el('p','dialog-save-error');
       title.id='observationTitle';dialog.setAttribute('aria-labelledby',title.id);input.id='observationText';input.type='text';input.maxLength=500;input.autocomplete='off';input.value=value.observation||'';input.placeholder='Detalhes desta oferta';label.htmlFor=input.id;
       error.id='observationSaveError';error.hidden=true;error.setAttribute('role','alert');input.setAttribute('aria-describedby',error.id);
-      const cancel=button('Cancelar','secondary',()=>dialog.close()),save=button('Salvar','primary',()=>{
+      const cancel=button('Voltar','secondary',()=>dialog.close()),save=button('Salvar','primary',()=>{
         if(disposed||state.busy||state.loading||state.offerDialog!==parent||!parent?.open){dialog.close();return;}
         const text=input.value.trim();if(text.length>500||/[\u0000-\u001f\u007f]/.test(text)){input.setAttribute('aria-invalid','true');error.textContent='Use até 500 caracteres em uma linha.';error.hidden=false;return;}
         changed(item.id,'observation',text);refresh();dialog.close();
       });
       input.addEventListener('input',()=>{input.removeAttribute('aria-invalid');error.hidden=true;});input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();save.click();}});
-      wrap.append(label,input);actions.append(error,save,cancel);dialog.append(title,wrap,actions);document.body.append(dialog);
+      wrap.append(label,input);actions.append(error,cancel,save);dialog.append(title,wrap,actions);document.body.append(dialog);
       const fit=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';};
       dialog.addEventListener('close',()=>{window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);dialog.remove();if(parent?.isConnected)parent.scrollTop=priorScroll;if(trigger.isConnected)trigger.focus({preventScroll:true});});
       dialog.showModal();fit();window.visualViewport?.addEventListener('resize',fit);window.visualViewport?.addEventListener('scroll',fit);input.focus({preventScroll:true});
@@ -371,7 +371,7 @@
         const errors=built.errors.filter(error=>error.offerId===value.offerId);
         if(data.offers.some(other=>other!==value&&other.brand&&other.brand.trim().toLocaleLowerCase('pt-BR')===value.brand.trim().toLocaleLowerCase('pt-BR'))&&!errors.some(e=>e.field==='brand'))errors.push({itemId:item.id,offerId:value.offerId,field:'brand',message:'Esta marca já foi informada. Edite a oferta existente.'});
         if(errors.length){showErrors(errors);return;}commit();
-      }),back=button('Voltar','secondary',()=>dialog.close());saveError.id='offerSaveError';saveError.hidden=true;saveError.tabIndex=-1;saveError.setAttribute('role','alert');dialog.saveError=saveError;actions.append(saveError,save,back);dialog.append(title,body,actions);document.body.append(dialog);
+      }),back=button('Voltar','secondary',()=>dialog.close());saveError.id='offerSaveError';saveError.hidden=true;saveError.tabIndex=-1;saveError.setAttribute('role','alert');dialog.saveError=saveError;actions.append(saveError,back,save);dialog.append(title,body,actions);document.body.append(dialog);
       let observationFrame;
       dialog.positionObservation=()=>{cancelAnimationFrame(observationFrame);observationFrame=requestAnimationFrame(()=>{const field=body.querySelector('.observation-field:not([hidden])');if(!field)return;const rect=field.getBoundingClientRect(),area=dialog.getBoundingClientRect();dialog.scrollTo({top:Math.max(0,dialog.scrollTop+rect.top-area.top-Math.max(16,(area.height-rect.height)/2)),behavior:'auto'});});};
       const fit=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';if(document.activeElement?.closest('.observation-field'))dialog.positionObservation();};

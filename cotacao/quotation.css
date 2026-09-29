@@ -206,3 +206,5 @@ h1{font-size:24px;line-height:1.25;margin:5px 0 14px;overflow-wrap:anywhere}
 .money-input input[aria-invalid="true"]{border:0;outline:none;box-shadow:none}
 
 .packaging-dialog .review-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.packaging-dialog .dialog-save-error{grid-column:1/-1}.packaging-dialog .review-actions button{min-width:0;width:100%}
+
+.observation-dialog .review-actions,.offer-edit-actions{grid-template-columns:1fr 1fr;gap:10px}.observation-dialog .dialog-save-error,.offer-edit-actions .dialog-save-error{grid-column:1/-1}.offer-edit-actions>p{grid-column:1/-1}.observation-dialog .review-actions button,.offer-edit-actions button{width:100%;min-width:0}
