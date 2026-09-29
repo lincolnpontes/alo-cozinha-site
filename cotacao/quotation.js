@@ -243,14 +243,14 @@
       amount.id='packagingAmount';amount.type='text';amount.inputMode='decimal';amount.autocomplete='off';amount.maxLength=17;amountLabel.htmlFor=amount.id;amount.value=editing?Core.inputNumber(old.amount):'';amount.placeholder='Ex.: 15';amount.addEventListener('focus',()=>amount.select());amount.addEventListener('click',()=>amount.select());amount.addEventListener('input',()=>{amount.value=Core.quantityFromTyping(amount.value);});
       let measure=allowed.some(m=>m.id===old.measure)?old.measure:allowed[0]?.id;const choice=choiceMenu(item,index,'packMeasure','Subunidade',allowed,measure,id=>{measure=id;});choice.trigger.id='packagingMeasure';measureLabel.htmlFor=choice.trigger.id;
       amountWrap.append(amountLabel,amount);measureWrap.append(measureLabel,choice.container);row.append(amountWrap,measureWrap);body.append(row);
-      const cancel=button('Cancelar','secondary',()=>dialog.close()),save=button('Salvar','primary',()=>{
+      const cancel=button('Voltar','secondary',()=>dialog.close()),save=button('Salvar','primary',()=>{
         const name=nameInput?nameInput.value.trim():label,count=Core.decimal(amount.value);
         if(!name||/[\u0000-\u001f]/.test(name)){error.textContent='Informe o nome da embalagem.';error.hidden=false;nameInput?.setAttribute('aria-invalid','true');nameInput?.focus();return;}
         if(!(count>0)||count>1e9||!allowed.some(m=>m.id===measure)){error.textContent='Informe uma quantidade maior que zero e a medida.';error.hidden=false;amount.setAttribute('aria-invalid','true');amount.focus();return;}
         changed(item.id,'commercialization',{kind,label:name,amount:count,measure});dialog.close();
       });
       for(const input of [nameInput,amount].filter(Boolean))input.addEventListener('input',()=>{input.removeAttribute('aria-invalid');error.hidden=true;});
-      amount.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save.click();}});actions.append(error,save,cancel);dialog.append(title,body,actions);document.body.append(dialog);
+      amount.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save.click();}});actions.append(error,cancel,save);dialog.append(title,body,actions);document.body.append(dialog);
       dialog.addEventListener('close',()=>{closeUnitChoice();dialog.remove();state.fields.get(item.id)?.commercialization.input.focus({preventScroll:true});});dialog.showModal();
       const fitDialog=()=>{const vp=window.visualViewport;dialog.style.top=((vp?.offsetTop||0)+12)+'px';dialog.style.maxHeight=Math.max(160,(vp?.height||innerHeight)-24)+'px';if(document.activeElement?.closest('.observation-field'))requestAnimationFrame(()=>document.activeElement?.scrollIntoView({block:'center',behavior:'auto'}));};
       fitDialog();window.visualViewport?.addEventListener('resize',fitDialog);window.visualViewport?.addEventListener('scroll',fitDialog);

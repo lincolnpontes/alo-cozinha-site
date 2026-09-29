@@ -204,3 +204,5 @@ h1{font-size:24px;line-height:1.25;margin:5px 0 14px;overflow-wrap:anywhere}
 .button.secondary.cancel-editing{background:#fff0ef;color:#923f3b;border-color:#eac8c6}.button.secondary.cancel-editing:hover{background:#fbe3e1}.receipt-panel{padding:22px}.receipt-title-row{display:flex;align-items:center;gap:14px;margin-bottom:12px}.receipt-title-row .state-mark{width:44px;height:44px;flex:0 0 44px;margin:0}.receipt-title-row .state-mark svg{width:24px;height:24px}.receipt-title-copy h1{margin:0;font-size:25px}.receipt-title-copy .receipt-date{font-size:14px;margin:4px 0 0;color:#687780}.receipt-panel .receipt-recipient{margin:8px 0 12px}.receipt-panel .edit-submitted-proposal{margin:8px auto}.receipt-panel .submitted-heading{margin-top:20px}
 
 .money-input input[aria-invalid="true"]{border:0;outline:none;box-shadow:none}
+
+.packaging-dialog .review-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.packaging-dialog .dialog-save-error{grid-column:1/-1}.packaging-dialog .review-actions button{min-width:0;width:100%}
